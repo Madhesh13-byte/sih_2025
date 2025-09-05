@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Users, Lock, User, Shield, Target, ArrowLeft, Plus, Eye, RefreshCw, Trash2 } from 'lucide-react';
+import { GraduationCap, Users, Lock, User, Shield, ArrowLeft, Eye, RefreshCw, Trash2 } from 'lucide-react';
 import './App.css';
-
 function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
@@ -13,7 +12,6 @@ function App() {
       setUser(userData);
       setCurrentPage('dashboard');
     } else {
-      // Check URL hash for admin access
       if (window.location.hash === '#admin') {
         setCurrentPage('admin');
       }
@@ -52,6 +50,16 @@ function LoginPage({ setToken, setUser, setCurrentPage }) {
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Auto-dismiss error messages after 2 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   // Admin access shortcut
   useEffect(() => {
@@ -190,6 +198,16 @@ function AdminLogin({ setToken, setUser, setCurrentPage }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Auto-dismiss error messages after 2 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
@@ -269,24 +287,9 @@ function AdminLogin({ setToken, setUser, setCurrentPage }) {
 
         {error && <div className="error">{error}</div>}
 
-
-
         <button 
           onClick={() => setCurrentPage('login')} 
-          style={{
-            position: 'absolute',
-            top: '1rem',
-            left: '1rem',
-            background: 'rgba(255,255,255,0.1)',
-            border: '1px solid rgba(255,255,255,0.2)',
-            color: 'white',
-            padding: '0.5rem 1rem',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}
+          className="back-button"
         >
           <ArrowLeft size={16} /> Back
         </button>
@@ -329,6 +332,16 @@ function AdminDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('main');
   const [accounts, setAccounts] = useState([]);
   const [message, setMessage] = useState('');
+  
+  // Auto-clear message after 2 seconds
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage('');
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
   
   const fetchAccounts = async () => {
     try {
@@ -386,7 +399,6 @@ function AdminDashboard({ user, logout }) {
     </div>
   );
 }
-
 function MainAdminView({ setCurrentView }) {
   return (
     <div className="admin-main">
