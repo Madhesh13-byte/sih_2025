@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import StudentDashboard from './components/StudentDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import TeacherDashboard from './components/TeacherDashboard';
 import { LoginPage, AdminLogin } from './components/Login';
 import './App.css';
 
@@ -56,7 +57,11 @@ function Dashboard({ user, logout }) {
     return <StudentDashboard user={user} logout={logout} />;
   }
   
-  // Staff dashboard (basic for now)
+  if (user?.role === 'staff') {
+    return <TeacherDashboard user={user} logout={logout} />;
+  }
+  
+  // Fallback dashboard
   return (
     <div className="dashboard">
       <nav className="navbar">
