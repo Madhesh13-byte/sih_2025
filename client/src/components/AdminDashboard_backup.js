@@ -702,21 +702,10 @@ function ViewAccounts({ accounts, setCurrentView, setMessage, fetchAccounts }) {
 }
 
 function SubjectManagement({ setCurrentView, setMessage }) {
-  const [subjects, setSubjects] = useState([]);
-
-  useEffect(() => {
-    const savedSubjects = JSON.parse(localStorage.getItem('subjects') || '[]');
-    if (savedSubjects.length === 0) {
-      const defaultSubjects = [
-        { id: 1, code: 'CS301', name: 'Data Structures', department: 'CS', year: 'III', semester: 1 },
-        { id: 2, code: 'CS302', name: 'Database Systems', department: 'CS', year: 'III', semester: 1 }
-      ];
-      setSubjects(defaultSubjects);
-      localStorage.setItem('subjects', JSON.stringify(defaultSubjects));
-    } else {
-      setSubjects(savedSubjects);
-    }
-  }, []);
+  const [subjects, setSubjects] = useState([
+    { id: 1, code: 'CS301', name: 'Data Structures', department: 'CS', year: 'III', semester: 1 },
+    { id: 2, code: 'CS302', name: 'Database Systems', department: 'CS', year: 'III', semester: 1 }
+  ]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     code: '', name: '', department: '', year: '', semester: ''
@@ -725,9 +714,7 @@ function SubjectManagement({ setCurrentView, setMessage }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     const newSubject = { ...formData, id: Date.now() };
-    const updatedSubjects = [...subjects, newSubject];
-    setSubjects(updatedSubjects);
-    localStorage.setItem('subjects', JSON.stringify(updatedSubjects));
+    setSubjects([...subjects, newSubject]);
     setFormData({ code: '', name: '', department: '', year: '', semester: '' });
     setShowForm(false);
     setMessage('Subject created successfully!');
@@ -855,9 +842,7 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                 <td>{subject.semester}</td>
                 <td>
                   <button className="delete-btn" onClick={() => {
-                    const updatedSubjects = subjects.filter(s => s.id !== subject.id);
-                    setSubjects(updatedSubjects);
-                    localStorage.setItem('subjects', JSON.stringify(updatedSubjects));
+                    setSubjects(subjects.filter(s => s.id !== subject.id));
                     setMessage('Subject deleted successfully!');
                   }}>
                     <Trash2 size={16} />
@@ -876,7 +861,6 @@ function StaffAssignments({ setCurrentView, setMessage }) {
   const [assignments, setAssignments] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [staffMembers, setStaffMembers] = useState([]);
-  const [subjects, setSubjects] = useState([]);
   const [formData, setFormData] = useState({
     staffId: '', subject: '', department: '', year: ''
   });
@@ -898,10 +882,11 @@ function StaffAssignments({ setCurrentView, setMessage }) {
 
   useEffect(() => {
     fetchStaffMembers();
-    // Get subjects from SubjectManagement component's state
-    const savedSubjects = JSON.parse(localStorage.getItem('subjects') || '[]');
-    setSubjects(savedSubjects);
   }, []);
+
+  const subjects = [
+    'Data Structures', 'Database Systems', 'Web Development', 'Computer Networks'
+  ];
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -965,12 +950,9 @@ function StaffAssignments({ setCurrentView, setMessage }) {
                     required
                   >
                     <option value="">Select Subject</option>
-                    {subjects
-                      .filter(subject => !formData.department || subject.department === formData.department)
-                      .filter(subject => !formData.year || subject.year === formData.year)
-                      .map(subject => (
-                        <option key={subject.id} value={subject.name}>{subject.name} ({subject.code})</option>
-                      ))}
+                    {subjects.map(subject => (
+                      <option key={subject} value={subject}>{subject}</option>
+                    ))}
                   </select>
                   <label>Subject</label>
                 </div>
@@ -991,18 +973,15 @@ function StaffAssignments({ setCurrentView, setMessage }) {
                   <label>Dept</label>
                 </div>
                 
-                <div className="select-group-modern">
-                  <select
+                <div className="input-group-modern">
+                  <input
+                    type="text"
                     value={formData.year}
                     onChange={(e) => setFormData({...formData, year: e.target.value})}
+                    placeholder="e.g., 24 for 2024"
+                    maxLength="2"
                     required
-                  >
-                    <option value="">Select Year</option>
-                    <option value="I">I Year</option>
-                    <option value="II">II Year</option>
-                    <option value="III">III Year</option>
-                    <option value="IV">IV Year</option>
-                  </select>
+                  />
                   <label>Year</label>
                 </div>
               </div>
@@ -1135,18 +1114,15 @@ function CCManagement({ setCurrentView, setMessage }) {
                   <label>Dept</label>
                 </div>
                 
-                <div className="select-group-modern">
-                  <select
+                <div className="input-group-modern">
+                  <input
+                    type="text"
                     value={formData.year}
                     onChange={(e) => setFormData({...formData, year: e.target.value})}
+                    placeholder="e.g., 24 for 2024"
+                    maxLength="2"
                     required
-                  >
-                    <option value="">Select Year</option>
-                    <option value="I">I Year</option>
-                    <option value="II">II Year</option>
-                    <option value="III">III Year</option>
-                    <option value="IV">IV Year</option>
-                  </select>
+                  />
                   <label>Year</label>
                 </div>
               </div>

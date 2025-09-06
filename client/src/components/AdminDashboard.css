@@ -146,19 +146,22 @@
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
-.create-student:hover {
+.admin-btn.create-student:hover {
   border-color: var(--primary);
   color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
 }
 
-.create-staff:hover {
+.admin-btn.create-staff:hover {
   border-color: var(--secondary);
   color: var(--secondary);
+  background: rgba(139, 92, 246, 0.05);
 }
 
-.view-accounts:hover {
+.admin-btn.view-accounts:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: rgba(6, 182, 212, 0.05);
 }
 
 .form-container {
@@ -300,24 +303,31 @@
   border: 2px solid rgba(99, 102, 241, 0.2) !important;
 }
 
-.date-selectors {
+.dob-inputs {
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 8px;
 }
 
-.date-selectors select {
-  flex: 1;
-  padding: 0.75rem 1rem;
+.dob-inputs input {
+  width: 60px;
+  padding: 0.75rem 0.5rem;
   border: 2px solid var(--gray-200);
   border-radius: 8px;
+  text-align: center;
   font-size: 1rem;
   transition: border-color 0.2s;
-  background: white;
 }
 
-.date-selectors select:focus {
+.dob-inputs input:focus {
   outline: none;
   border-color: var(--primary);
+}
+
+.dob-inputs span {
+  color: var(--gray-600);
+  font-weight: bold;
+  font-size: 1.2rem;
 }
 
 .message {
@@ -358,6 +368,30 @@
 .submit-btn:disabled {
   background: var(--gray-400);
   cursor: not-allowed;
+}
+
+.submit-btn.loading {
+  background: linear-gradient(135deg, #a0a0a0 0%, #808080 100%);
+  cursor: not-allowed;
+  transform: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid transparent;
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .accounts-container {
@@ -491,6 +525,502 @@
   transform: scale(1.1);
 }
 
+/* New Admin Features */
+.admin-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.section-group {
+  text-align: center;
+}
+
+.section-group h3 {
+  color: var(--gray-700);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 2rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--primary);
+  display: inline-block;
+}
+
+.subjects:hover {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.assignments:hover {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.coordinators:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+.reports:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.add-btn {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  border: none;
+  padding: 0.875rem 2rem;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.add-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.add-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+}
+
+.add-btn:hover::before {
+  left: 100%;
+}
+
+.add-btn:active {
+  transform: translateY(0);
+}
+
+/* Modern Form Overlay */
+.form-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modern-form {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(60px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.form-header-modern {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2rem 2rem 1rem;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.form-header-modern h3 {
+  color: var(--gray-900);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  color: var(--gray-400);
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+.form-body {
+  padding: 2rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.form-row:last-child {
+  margin-bottom: 0;
+}
+
+/* Modern Input Groups */
+.input-group-modern {
+  position: relative;
+  flex: 1;
+}
+
+.input-group-modern input {
+  width: 100%;
+  padding: 1rem 1rem 1rem 1rem;
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  font-size: 1rem;
+  background: var(--gray-50);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.input-group-modern input:focus {
+  border-color: var(--primary);
+  background: white;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.input-group-modern input:focus + label,
+.input-group-modern input:not(:placeholder-shown) + label {
+  transform: translateY(-2.5rem) scale(0.85);
+  color: var(--primary);
+  background: white;
+  padding: 0 0.5rem;
+}
+
+.input-group-modern label {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  color: var(--gray-500);
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  transform-origin: left top;
+}
+
+.input-highlight {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--primary);
+  transition: width 0.3s;
+}
+
+.input-group-modern input:focus ~ .input-highlight {
+  width: 100%;
+}
+
+/* Modern Select Groups */
+.select-group-modern {
+  position: relative;
+  flex: 1;
+}
+
+.select-group-modern.full-width {
+  flex: none;
+  width: 100%;
+}
+
+.select-group-modern select {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  font-size: 1rem;
+  background: var(--gray-50);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.select-group-modern select:focus {
+  border-color: var(--primary);
+  background: white;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.select-group-modern select:focus + label,
+.select-group-modern select:not([value=""]) + label {
+  transform: translateY(-2.5rem) scale(0.85);
+  color: var(--primary);
+  background: white;
+  padding: 0 0.5rem;
+}
+
+.select-group-modern label {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  color: var(--gray-500);
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  transform-origin: left top;
+}
+
+.select-group-modern::after {
+  content: '▼';
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--gray-400);
+  pointer-events: none;
+  font-size: 0.8rem;
+}
+
+/* Form Actions */
+.form-actions-modern {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem 2rem 2rem;
+  border-top: 1px solid var(--gray-200);
+  justify-content: flex-end;
+}
+
+.cancel-btn {
+  padding: 0.875rem 2rem;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+}
+
+.create-btn {
+  padding: 0.875rem 2rem;
+  background: linear-gradient(135deg, var(--success), #059669);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.create-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.create-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+}
+
+.create-btn:hover::before {
+  left: 100%;
+}
+
+.create-btn:active {
+  transform: translateY(0);
+}
+
+.subjects-table,
+.assignments-table,
+.coordinators-table {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  overflow: hidden;
+}
+
+.subjects-table table,
+.assignments-table table,
+.coordinators-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.subjects-table th,
+.subjects-table td,
+.assignments-table th,
+.assignments-table td,
+.coordinators-table th,
+.coordinators-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.subjects-table th,
+.assignments-table th,
+.coordinators-table th {
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+/* Reports Overview */
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.report-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: transform 0.2s;
+}
+
+.report-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.report-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.report-icon.students {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+}
+
+.report-icon.staff {
+  background: linear-gradient(135deg, var(--secondary), #7c3aed);
+}
+
+.report-icon.subjects {
+  background: linear-gradient(135deg, var(--success), #059669);
+}
+
+.report-icon.attendance {
+  background: linear-gradient(135deg, var(--warning), #d97706);
+}
+
+.report-icon.certificates {
+  background: linear-gradient(135deg, var(--accent), #0891b2);
+}
+
+.report-icon.coordinators {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.report-content h3 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 0.25rem;
+}
+
+.report-content p {
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.detailed-reports {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+}
+
+.detailed-reports h3 {
+  color: var(--gray-900);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.report-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.report-btn {
+  padding: 1rem 1.5rem;
+  background: var(--gray-100);
+  border: 2px solid var(--gray-200);
+  border-radius: 8px;
+  color: var(--gray-700);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.report-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .navbar {
@@ -522,5 +1052,17 @@
   .accounts-table th,
   .accounts-table td {
     padding: 0.5rem;
+  }
+  
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .report-buttons {
+    grid-template-columns: 1fr;
+  }
+  
+  .admin-sections {
+    gap: 2rem;
   }
 }
