@@ -15,10 +15,8 @@ app.use(express.json());
 const db = new sqlite3.Database('./database.db');
 
 db.serialize(() => {
-  // Drop existing table and recreate with correct structure
-  db.run('DROP TABLE IF EXISTS users');
-  
-  db.run(`CREATE TABLE users (
+  // Create table only if it doesn't exist
+  db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     register_no TEXT UNIQUE,
     staff_id TEXT UNIQUE,
@@ -31,21 +29,108 @@ db.serialize(() => {
     created_by INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Staff assignments table
+  db.run(`CREATE TABLE IF NOT EXISTS staff_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id TEXT NOT NULL,
+    staff_name TEXT NOT NULL,
+    subject_code TEXT NOT NULL,
+    subject_name TEXT NOT NULL,
+    department TEXT NOT NULL,
+    year TEXT NOT NULL,
+    semester TEXT NOT NULL,
+    class_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // CC assignments table
+  db.run(`CREATE TABLE IF NOT EXISTS cc_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id TEXT NOT NULL,
+    staff_name TEXT NOT NULL,
+    department TEXT NOT NULL,
+    year TEXT NOT NULL,
+    semester TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Classes table
+  db.run(`CREATE TABLE IF NOT EXISTS classes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    department TEXT NOT NULL,
+    year TEXT NOT NULL,
+    section TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Admin notifications table
+  db.run(`CREATE TABLE IF NOT EXISTS admin_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT NOT NULL,
+    related_id INTEGER,
+    read_status INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Admin settings table
+  db.run(`CREATE TABLE IF NOT EXISTS admin_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    setting_key TEXT UNIQUE NOT NULL,
+    setting_value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Insert default settings
+  db.run(`INSERT OR IGNORE INTO admin_settings (setting_key, setting_value) VALUES (?, ?)`,
+    ['auto_create_classes', 'true']);
+
+  // Add columns if they don't exist
+  db.run(`ALTER TABLE cc_assignments ADD COLUMN semester TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding semester column:', err);
+    }
+  });
   
-  // Insert default users
+  db.run(`ALTER TABLE users ADD COLUMN class_id INTEGER`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding class_id column to users:', err);
+    }
+  });
+  
+  db.run(`ALTER TABLE users ADD COLUMN joining_year INTEGER`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding joining_year column to users:', err);
+    }
+  });
+  
+  db.run(`ALTER TABLE staff_assignments ADD COLUMN class_id INTEGER`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding class_id column to staff_assignments:', err);
+    }
+  });
+  
+  // Insert default users only if they don't exist
   const hashedPassword = bcrypt.hashSync('password123', 10);
   
-  // Student
-  db.run('INSERT INTO users (register_no, password, role, name) VALUES (?, ?, ?, ?)',
-    ['STU001', hashedPassword, 'student', 'John Student']);
-  
-  // Staff
-  db.run('INSERT INTO users (staff_id, password, role, name, department) VALUES (?, ?, ?, ?, ?)',
-    ['STF001', hashedPassword, 'staff', 'Jane Staff', 'Computer Science']);
-  
-  // Admin
-  db.run('INSERT INTO users (admin_id, password, role, name) VALUES (?, ?, ?, ?)',
-    ['ADM001', hashedPassword, 'admin', 'Admin User']);
+  // Check if admin exists, if not create default users
+  db.get('SELECT COUNT(*) as count FROM users WHERE role = ?', ['admin'], (err, row) => {
+    if (!err && row.count === 0) {
+      // Student
+      db.run('INSERT INTO users (register_no, password, role, name) VALUES (?, ?, ?, ?)',
+        ['STU001', hashedPassword, 'student', 'John Student']);
+      
+      // Staff
+      db.run('INSERT INTO users (staff_id, password, role, name, department) VALUES (?, ?, ?, ?, ?)',
+        ['STF001', hashedPassword, 'staff', 'Jane Staff', 'Computer Science']);
+      
+      // Admin
+      db.run('INSERT INTO users (admin_id, password, role, name) VALUES (?, ?, ?, ?)',
+        ['ADM001', hashedPassword, 'admin', 'Admin User']);
+    }
+  });
 });
 
 // Student login
@@ -154,24 +239,67 @@ const requireAdmin = (req, res, next) => {
 
 // Create student account
 app.post('/api/admin/create-student', authenticateToken, requireAdmin, async (req, res) => {
-  const { register_no, name, email, password, department } = req.body;
+  const { register_no, name, email, password, department, year } = req.body;
   
   if (!register_no || !name || !password) {
     return res.status(400).json({ error: 'Register No, Name, and Password are required' });
   }
   
   const hashedPassword = await bcrypt.hash(password, 10);
+  const joiningYear = year ? 2000 + parseInt(year) : null;
   
-  db.run('INSERT INTO users (register_no, name, email, password, role, department, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [register_no, name, email || null, hashedPassword, 'student', department, req.user.id], function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Register number already exists' });
-        }
-        return res.status(500).json({ error: 'Failed to create student account' });
-      }
-      res.json({ message: 'Student account created successfully', studentId: this.lastID });
+  try {
+    const { autoAssignStudentClass, rollbackClassCreation } = require('./utils/businessLogic');
+    
+    // Check auto-creation setting
+    const autoCreateEnabled = await new Promise((resolve, reject) => {
+      db.get('SELECT setting_value FROM admin_settings WHERE setting_key = ?', 
+        ['auto_create_classes'], (err, row) => {
+          if (err) reject(err);
+          else resolve(row ? row.setting_value === 'true' : true);
+        });
     });
+    
+    // Auto-assign to appropriate class with enhanced validation
+    let class_id = null;
+    let classCreated = false;
+    if (joiningYear && department) {
+      const result = await autoAssignStudentClass(db, 
+        { department, joining_year: joiningYear }, 
+        { autoCreateEnabled, adminId: req.user.id }
+      );
+      class_id = result.classId;
+      classCreated = result.created;
+    }
+    
+    db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [register_no, name, email || null, hashedPassword, 'student', department, joiningYear, class_id, req.user.id], 
+      async function(err) {
+        if (err) {
+          // Rollback class creation if student creation failed
+          if (classCreated && class_id) {
+            try {
+              await rollbackClassCreation(db, class_id);
+            } catch (rollbackErr) {
+              console.error('Rollback failed:', rollbackErr);
+            }
+          }
+          
+          if (err.message.includes('UNIQUE constraint failed')) {
+            return res.status(400).json({ error: 'Register number already exists' });
+          }
+          return res.status(500).json({ error: 'Failed to create student account' });
+        }
+        
+        const message = classCreated ? 
+          'Student account created and assigned to new class' : 
+          'Student account created and assigned to existing class';
+        
+        res.json({ message, studentId: this.lastID, classCreated });
+      });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Create staff account
@@ -196,16 +324,15 @@ app.post('/api/admin/create-staff', authenticateToken, requireAdmin, async (req,
     });
 });
 
-// Get next staff number for department and year
+// Get next staff number for department
 app.get('/api/admin/next-staff-number', authenticateToken, requireAdmin, (req, res) => {
-  const { dept, year } = req.query;
+  const { dept } = req.query;
   
-  if (!dept || !year) {
-    return res.status(400).json({ error: 'Department and year are required' });
+  if (!dept) {
+    return res.status(400).json({ error: 'Department is required' });
   }
   
-  const yearCode = year.toString().slice(-2);
-  const pattern = `STF${dept}${yearCode}%`;
+  const pattern = `STF${dept}%`;
   
   db.all('SELECT staff_id FROM users WHERE staff_id LIKE ? AND role = ? ORDER BY staff_id',
     [pattern, 'staff'], (err, staff) => {
@@ -214,9 +341,15 @@ app.get('/api/admin/next-staff-number', authenticateToken, requireAdmin, (req, r
       // Find the next available number
       let nextNumber = 1;
       if (staff.length > 0) {
-        const lastStaff = staff[staff.length - 1];
-        const lastNumber = parseInt(lastStaff.staff_id.slice(-2));
-        nextNumber = lastNumber + 1;
+        // Extract numbers from existing staff IDs
+        const existingNumbers = staff.map(s => {
+          const match = s.staff_id.match(/STF[A-Z]+0*(\d+)$/);
+          return match ? parseInt(match[1]) : 0;
+        }).filter(num => num > 0);
+        
+        if (existingNumbers.length > 0) {
+          nextNumber = Math.max(...existingNumbers) + 1;
+        }
       }
       
       res.json({ nextNumber });
@@ -307,6 +440,277 @@ app.put('/api/admin/reset-password/:id', authenticateToken, requireAdmin, async 
     });
 });
 
+// Staff assignments endpoints
+app.post('/api/staff-assignments', authenticateToken, requireAdmin, async (req, res) => {
+  const { staffId, staffName, subjectCode, subjectName, department, year, semester } = req.body;
+  
+  try {
+    const { validateStaffAssignment } = require('./utils/businessLogic');
+    
+    // Validate staff assignment
+    await validateStaffAssignment(db, { staff_id: staffId, semester });
+    
+    // Find the class_id based on department and year
+    db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?', 
+      [department, year, 'A'], (err, classRow) => {
+        const class_id = classRow ? classRow.id : null;
+        
+        db.run(
+          `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, class_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [staffId, staffName, subjectCode, subjectName, department, year, semester, class_id],
+          function(err) {
+            if (err) {
+              return res.status(500).json({ error: 'Database error' });
+            }
+            res.json({ id: this.lastID, message: 'Staff assignment created successfully' });
+          }
+        );
+      });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/staff-assignments', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM staff_assignments ORDER BY created_at DESC', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json(rows);
+  });
+});
+
+app.delete('/api/staff-assignments/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  
+  db.run('DELETE FROM staff_assignments WHERE id = ?', [id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json({ message: 'Staff assignment deleted successfully' });
+  });
+});
+
+// CC assignments endpoints
+app.post('/api/cc-assignments', authenticateToken, requireAdmin, (req, res) => {
+  const { staffId, staffName, department, year, semester } = req.body;
+  console.log('CC Assignment request:', { staffId, staffName, department, year, semester });
+  
+  db.run(
+    `INSERT INTO cc_assignments (staff_id, staff_name, department, year, semester) VALUES (?, ?, ?, ?, ?)`,
+    [staffId, staffName, department, year, semester],
+    function(err) {
+      if (err) {
+        console.error('CC Assignment DB error:', err);
+        return res.status(500).json({ error: 'Database error: ' + err.message });
+      }
+      console.log('CC Assignment created successfully');
+      res.json({ id: this.lastID, message: 'CC assignment created successfully' });
+    }
+  );
+});
+
+app.get('/api/cc-assignments', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM cc_assignments ORDER BY created_at DESC', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json(rows);
+  });
+});
+
+app.delete('/api/cc-assignments/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  
+  db.run('DELETE FROM cc_assignments WHERE id = ?', [id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json({ message: 'CC assignment deleted successfully' });
+  });
+});
+
+// Classes endpoints
+app.post('/api/classes', authenticateToken, requireAdmin, (req, res) => {
+  const { department, year, section } = req.body;
+  
+  db.run(
+    `INSERT INTO classes (department, year, section) VALUES (?, ?, ?)`,
+    [department, year, section],
+    function(err) {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json({ id: this.lastID, message: 'Class created successfully' });
+    }
+  );
+});
+
+app.get('/api/classes', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM classes ORDER BY department, year, section', (err, rows) => {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json(rows);
+  });
+});
+
+app.delete('/api/classes/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  
+  db.run('DELETE FROM classes WHERE id = ?', [id], function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json({ message: 'Class deleted successfully' });
+  });
+});
+
+// Update student with class assignment
+app.put('/api/admin/assign-student-class/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { class_id } = req.body;
+  const userId = req.params.id;
+  
+  db.run('UPDATE users SET class_id = ? WHERE id = ? AND role = ?',
+    [class_id, userId, 'student'], function(err) {
+      if (err) return res.status(500).json({ error: 'Failed to assign class' });
+      if (this.changes === 0) return res.status(404).json({ error: 'Student not found' });
+      res.json({ message: 'Student assigned to class successfully' });
+    });
+});
+
+// Get students by class
+app.get('/api/classes/:class_id/students', authenticateToken, (req, res) => {
+  db.all('SELECT id, register_no, name, joining_year FROM users WHERE class_id = ? AND role = ?',
+    [req.params.class_id, 'student'], (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    });
+});
+
+// Get class details with students and staff assignments
+app.get('/api/classes/:class_id/details', authenticateToken, (req, res) => {
+  const classId = req.params.class_id;
+  
+  // Get class info
+  db.get('SELECT * FROM classes WHERE id = ?', [classId], (err, classInfo) => {
+    if (err || !classInfo) {
+      return res.status(404).json({ error: 'Class not found' });
+    }
+    
+    // Get students in this class
+    db.all('SELECT id, register_no, name, joining_year FROM users WHERE class_id = ? AND role = ?',
+      [classId, 'student'], (err, students) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        
+        // Get staff assignments for this class based on department and year
+        db.all('SELECT * FROM staff_assignments WHERE department = ? AND year = ?',
+          [classInfo.department, classInfo.year], (err, assignments) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            
+            // Get CC assignments for this class based on department and year
+            db.all('SELECT * FROM cc_assignments WHERE department = ? AND year = ?',
+              [classInfo.department, classInfo.year], (err, ccAssignments) => {
+                if (err) return res.status(500).json({ error: 'Database error' });
+                
+                res.json({
+                  class: classInfo,
+                  students,
+                  assignments,
+                  ccAssignments
+                });
+              });
+          });
+      });
+  });
+});
+
+// Admin settings endpoints
+app.get('/api/admin/settings', authenticateToken, requireAdmin, (req, res) => {
+  db.all('SELECT * FROM admin_settings', (err, settings) => {
+    if (err) return res.status(500).json({ error: 'Failed to fetch settings' });
+    
+    const settingsObj = {};
+    settings.forEach(setting => {
+      settingsObj[setting.setting_key] = setting.setting_value;
+    });
+    
+    res.json(settingsObj);
+  });
+});
+
+app.put('/api/admin/settings', authenticateToken, requireAdmin, (req, res) => {
+  const { auto_create_classes } = req.body;
+  
+  if (auto_create_classes !== undefined) {
+    db.run('UPDATE admin_settings SET setting_value = ?, updated_at = datetime(\'now\') WHERE setting_key = ?',
+      [auto_create_classes.toString(), 'auto_create_classes'], function(err) {
+        if (err) return res.status(500).json({ error: 'Failed to update settings' });
+        res.json({ message: 'Settings updated successfully' });
+      });
+  } else {
+    res.status(400).json({ error: 'No valid settings provided' });
+  }
+});
+
+// Admin notifications endpoints
+app.get('/api/admin/notifications', authenticateToken, requireAdmin, (req, res) => {
+  db.all('SELECT * FROM admin_notifications WHERE admin_id = ? ORDER BY created_at DESC LIMIT 50',
+    [req.user.id], (err, notifications) => {
+      if (err) return res.status(500).json({ error: 'Failed to fetch notifications' });
+      res.json(notifications);
+    });
+});
+
+app.put('/api/admin/notifications/:id/read', authenticateToken, requireAdmin, (req, res) => {
+  db.run('UPDATE admin_notifications SET read_status = 1 WHERE id = ? AND admin_id = ?',
+    [req.params.id, req.user.id], function(err) {
+      if (err) return res.status(500).json({ error: 'Failed to mark notification as read' });
+      res.json({ message: 'Notification marked as read' });
+    });
+});
+
+// Get students for staff assignments (for teachers)
+app.get('/api/staff/students/:assignmentId', authenticateToken, (req, res) => {
+  const { assignmentId } = req.params;
+  
+  // Get assignment details
+  db.get('SELECT * FROM staff_assignments WHERE id = ? AND staff_id = ?', 
+    [assignmentId, req.user.staff_id || req.user.id], (err, assignment) => {
+      if (err || !assignment) {
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+      
+      // Get students from classes matching the assignment's department and year
+      db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, c.section 
+              FROM users u 
+              JOIN classes c ON u.class_id = c.id 
+              WHERE u.role = 'student' AND c.department = ? AND c.year = ?
+              ORDER BY c.section, u.register_no`,
+        [assignment.department, assignment.year], (err, students) => {
+          if (err) return res.status(500).json({ error: 'Database error' });
+          
+          res.json({
+            assignment,
+            students
+          });
+        });
+    });
+});
+
+// Admin routes
+const adminRoutes = require('./routes/admin');
+app.use('/api/admin', authenticateToken, requireAdmin, (req, res, next) => {
+  req.db = db;
+  next();
+}, adminRoutes);
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('✅ Enhanced auto-creation system with:');
+  console.log('  - Admin notifications for class creation');
+  console.log('  - Department/year validation');
+  console.log('  - Proper capacity checking');
+  console.log('  - Rollback mechanism');
+  console.log('  - Optional auto-creation toggle');
 });

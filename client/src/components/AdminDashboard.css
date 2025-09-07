@@ -401,27 +401,143 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.filters {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background: var(--gray-50);
-  border-radius: 8px;
+/* Department-based Filtering */
+.dept-filters {
+  margin-bottom: 2rem;
 }
 
-.filters select {
+.dept-filters h3 {
+  color: var(--gray-800);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.dept-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dept-btn {
+  padding: 0.75rem 1.5rem;
+  background: white;
+  border: 2px solid var(--gray-200);
+  border-radius: 8px;
+  color: var(--gray-700);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dept-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.dept-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.role-filters {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--gray-50);
+  border-radius: 12px;
+}
+
+.role-filters h4 {
+  color: var(--gray-800);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.role-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.role-btn {
+  padding: 0.75rem 2rem;
+  background: white;
+  border: 2px solid var(--gray-200);
+  border-radius: 8px;
+  color: var(--gray-700);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.role-btn:hover {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+.role-btn.active {
+  background: var(--secondary);
+  border-color: var(--secondary);
+  color: white;
+}
+
+.year-filters {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.year-filters h5 {
+  color: var(--gray-700);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.year-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.year-btn {
   padding: 0.5rem 1rem;
+  background: white;
   border: 1px solid var(--gray-300);
   border-radius: 6px;
-  font-size: 0.9rem;
-  background: white;
-  min-width: 120px;
+  color: var(--gray-600);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.filters select:focus {
-  outline: none;
-  border-color: var(--primary);
+.year-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.year-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.accounts-summary {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 6px;
+  border-left: 4px solid var(--success);
+}
+
+.accounts-summary p {
+  color: var(--success);
+  font-weight: 500;
+  margin: 0;
 }
 
 .accounts-table {
@@ -549,6 +665,160 @@
 .subjects:hover {
   border-color: var(--success);
   color: var(--success);
+}
+
+/* Class Management Styles */
+.classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.class-card {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  padding: 1.5rem;
+  transition: all 0.2s;
+}
+
+.class-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.class-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.class-header h3 {
+  color: var(--gray-900);
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.subject-count {
+  background: var(--primary);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.class-subjects {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.subject-assignment {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+}
+
+.subject-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.subject-info strong {
+  color: var(--gray-900);
+  font-weight: 600;
+}
+
+.subject-info span {
+  color: var(--gray-600);
+  font-size: 0.9rem;
+}
+
+.assigned-teacher {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.teacher-select {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  background: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.teacher-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.mapped-indicator {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.map-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.map-btn:hover {
+  background: var(--primary-dark);
+}
+
+.map-btn:disabled {
+  background: var(--gray-400);
+  cursor: not-allowed;
+}
+
+.subject-info small {
+  color: var(--gray-500);
+  font-size: 0.8rem;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.no-subjects {
+  text-align: center;
+  color: var(--gray-500);
+  font-style: italic;
+  padding: 2rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--gray-500);
+}
+
+.empty-state p {
+  font-size: 1.1rem;
 }
 
 .assignments:hover {
@@ -1021,8 +1291,160 @@
   background: rgba(99, 102, 241, 0.05);
 }
 
+/* Bulk Subject Creation */
+.bulk-subjects {
+  max-width: 800px;
+}
+
+.subjects-bulk {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.subject-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  padding: 1rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+}
+
+.subject-row .input-group-modern {
+  flex: 1;
+}
+
+/* Bulk Assignment Styles */
+.bulk-assignments {
+  max-width: 800px;
+}
+
+.assignments-bulk {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.assignment-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  padding: 1rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+}
+
+.assignment-row .select-group-modern {
+  flex: 1;
+}
+
+.remove-row-btn {
+  background: var(--error);
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.remove-row-btn:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.add-row-btn {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+  align-self: flex-start;
+}
+
+.add-row-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* Student and Staff Row Styles */
+.student-row, .staff-row {
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  background: var(--gray-50);
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  position: relative;
+}
+
+.student-row .remove-row-btn,
+.staff-row .remove-row-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: var(--error);
+  color: white;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  transition: all 0.2s;
+}
+
+.student-row .remove-row-btn:hover,
+.staff-row .remove-row-btn:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gray-200);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .subject-row, .assignment-row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .remove-row-btn {
+    align-self: flex-end;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
+  
+  .dept-buttons, .role-toggle, .year-buttons {
+    justify-content: center;
+  }
+  
+  .dept-btn, .role-btn {
+    flex: 1;
+    min-width: 120px;
+  }
   .navbar {
     flex-direction: column;
     gap: 1rem;

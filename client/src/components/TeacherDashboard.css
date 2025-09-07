@@ -185,6 +185,147 @@
   overflow-y: auto;
 }
 
+/* Overview Section */
+.overview-section h2 {
+  color: var(--gray-900);
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+}
+
+.overview-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.stat-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.stat-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.stat-icon.subjects {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+}
+
+.stat-icon.classes {
+  background: linear-gradient(135deg, var(--success), #22c55e);
+}
+
+.stat-icon.semesters {
+  background: linear-gradient(135deg, var(--accent), #0ea5e9);
+}
+
+.stat-content h3 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gray-900);
+  margin-bottom: 0.5rem;
+}
+
+.stat-content p {
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.recent-assignments {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+}
+
+.recent-assignments h3 {
+  color: var(--gray-900);
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.assignments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.assignment-card {
+  background: var(--gray-50);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+}
+
+.assignment-card h4 {
+  color: var(--gray-900);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.assignment-card p {
+  color: var(--gray-600);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* Assignments Section */
+.assignments-section h2 {
+  color: var(--gray-900);
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+}
+
+.assignments-table {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+}
+
+.assignments-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.assignments-table th,
+.assignments-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.assignments-table th {
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.status.active {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
 /* Grades Section */
 .grades-section h2 {
   color: var(--gray-900);
