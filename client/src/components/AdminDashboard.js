@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings } from 'lucide-react';
+import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar } from 'lucide-react';
 import './AdminDashboard.css';
 import ClassManagement from './ClassManagementNew';
 import AdminSettings from './AdminSettings';
+import TimetableManagement from './TimetableManagement';
 
 function AdminDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('main');
@@ -92,6 +93,10 @@ function AdminDashboard({ user, logout }) {
         {currentView === 'settings' && (
           <AdminSettings setCurrentView={setCurrentView} />
         )}
+        
+        {currentView === 'timetables' && (
+          <TimetableManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
+        )}
       </div>
     </div>
   );
@@ -143,6 +148,11 @@ function MainAdminView({ setCurrentView }) {
             <button className="admin-btn classes" onClick={() => setCurrentView('classes')}>
               <Users size={24} />
               <span>Class Management</span>
+            </button>
+            
+            <button className="admin-btn timetables" onClick={() => setCurrentView('timetables')}>
+              <Calendar size={24} />
+              <span>Timetable Management</span>
             </button>
           </div>
         </div>

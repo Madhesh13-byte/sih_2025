@@ -86,6 +86,27 @@ function StudentDashboard({ user, logout }) {
 }
 
 function OverviewSection({ user }) {
+  const [overallAttendance, setOverallAttendance] = useState(0);
+
+  useEffect(() => {
+    fetchOverallAttendance();
+  }, []);
+
+  const fetchOverallAttendance = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/student/attendance', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setOverallAttendance(data.overall.percentage);
+      }
+    } catch (error) {
+      console.error('Failed to fetch attendance:', error);
+    }
+  };
+
   return (
     <div className="overview-section">
       <h2>Dashboard Overview</h2>
@@ -107,9 +128,11 @@ function OverviewSection({ user }) {
             <Calendar size={24} />
           </div>
           <div className="stat-content">
-            <h3>--%</h3>
+            <h3>{overallAttendance}%</h3>
             <p>Overall Attendance</p>
-            <span className="stat-trend neutral">Not available yet</span>
+            <span className={`stat-trend ${overallAttendance >= 75 ? 'positive' : 'negative'}`}>
+              {overallAttendance >= 75 ? 'Good standing' : 'Below required'}
+            </span>
           </div>
         </div>
 
@@ -245,7 +268,50 @@ function AcademicSection({ user }) {
 }
 
 function AttendanceSection({ user }) {
-  const attendanceData = [];
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [overallStats, setOverallStats] = useState({ total: 0, present: 0, missed: 0, percentage: 0 });
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [subjectRecords, setSubjectRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAttendance();
+  }, []);
+
+  const fetchAttendance = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/student/attendance', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAttendanceData(data.subjects);
+        setOverallStats(data.overall);
+      }
+    } catch (error) {
+      console.error('Failed to fetch attendance:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubjectSelect = (subjectCode) => {
+    setSelectedSubject(subjectCode);
+    const subject = attendanceData.find(s => s.subject_code === subjectCode);
+    if (subject) {
+      setSubjectRecords(subject.records);
+    }
+  };
+
+  const formatDate = (dateStr) => {
+    return new Date(dateStr).toLocaleDateString('en-IN');
+  };
+
+  const getDayOrder = (dayOfWeek) => {
+    const days = ['I', 'II', 'III', 'IV', 'V'];
+    return days[dayOfWeek] || dayOfWeek;
+  };
 
   const getAttendanceStatus = (percentage) => {
     if (percentage >= 85) return 'excellent';
@@ -254,6 +320,10 @@ function AttendanceSection({ user }) {
     return 'critical';
   };
 
+  if (loading) {
+    return <div style={{ padding: '20px', textAlign: 'center' }}>Loading attendance...</div>;
+  }
+
   return (
     <div className="attendance-section">
       <h2>Attendance Records</h2>
@@ -261,23 +331,37 @@ function AttendanceSection({ user }) {
       <div className="attendance-overview">
         <div className="overall-attendance">
           <div className="attendance-circle">
-            <span className="percentage">--%</span>
+            <span className="percentage">{overallStats.percentage}%</span>
             <span className="label">Overall</span>
           </div>
           <div className="attendance-info">
-            <p>Total Classes: 0</p>
-            <p>Attended: 0</p>
-            <p>Missed: 0</p>
+            <p>Total Classes: {overallStats.total}</p>
+            <p>Attended: {overallStats.present}</p>
+            <p>Missed: {overallStats.missed}</p>
           </div>
         </div>
 
         <div className="attendance-prediction">
-          <h3>Attendance Prediction</h3>
+          <h3>Attendance Status</h3>
           <div className="prediction-card">
             <Calendar size={20} />
             <div>
-              <p><strong>No attendance data available</strong></p>
-              <p>Attendance tracking will begin once classes start</p>
+              {overallStats.percentage >= 75 ? (
+                <>
+                  <p><strong>Good Standing</strong></p>
+                  <p>Your attendance is above the required 75%</p>
+                </>
+              ) : overallStats.percentage >= 65 ? (
+                <>
+                  <p><strong>Warning</strong></p>
+                  <p>Your attendance is below 75%. Attend more classes.</p>
+                </>
+              ) : (
+                <>
+                  <p><strong>Critical</strong></p>
+                  <p>Your attendance is critically low. Contact your advisor.</p>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -294,9 +378,14 @@ function AttendanceSection({ user }) {
             </div>
           ) : (
             attendanceData.map((subject, index) => (
-              <div key={index} className="attendance-item">
+              <div 
+                key={index} 
+                className={`attendance-item ${selectedSubject === subject.subject_code ? 'selected' : ''}`}
+                onClick={() => handleSubjectSelect(subject.subject_code)}
+                style={{ cursor: 'pointer' }}
+              >
                 <div className="subject-info">
-                  <span className="subject-name">{subject.subject}</span>
+                  <span className="subject-name">{subject.subject_name}</span>
                   <span className="attendance-ratio">{subject.present}/{subject.total}</span>
                 </div>
                 <div className="attendance-bar">
@@ -313,6 +402,45 @@ function AttendanceSection({ user }) {
           )}
         </div>
       </div>
+
+      {selectedSubject && (
+        <div className="subject-details">
+          <h3>Detailed Records - {attendanceData.find(s => s.subject_code === selectedSubject)?.subject_name}</h3>
+          <div className="records-table">
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '15px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8f9fa' }}>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Date</th>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Day Order</th>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Period</th>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subjectRecords.map((record, index) => (
+                  <tr key={index}>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>{formatDate(record.date)}</td>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>Day {getDayOrder(record.day_of_week)}</td>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>Period {record.period_number}</td>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>
+                      <span style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        backgroundColor: record.status === 'present' ? '#d4edda' : '#f8d7da',
+                        color: record.status === 'present' ? '#155724' : '#721c24'
+                      }}>
+                        {record.status === 'present' ? 'Present' : 'Absent'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Attendance System</title>
+</head>
+<body>
+    <h1>Debug Attendance System</h1>
+    <div id="output"></div>
+    
+    <script>
+        // Test the debug endpoint
+        async function testDebug() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    document.getElementById('output').innerHTML = 'No token found. Please login first.';
+                    return;
+                }
+                
+                const response = await fetch('http://localhost:5000/api/debug/data', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('output').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } else {
+                    document.getElementById('output').innerHTML = 'Error: ' + response.status;
+                }
+            } catch (error) {
+                document.getElementById('output').innerHTML = 'Error: ' + error.message;
+            }
+        }
+        
+        // Test current period endpoint
+        async function testCurrentPeriod() {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('http://localhost:5000/api/staff/current-period', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('output').innerHTML += '<h2>Current Period:</h2><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } else {
+                    document.getElementById('output').innerHTML += '<h2>Current Period Error:</h2>' + response.status;
+                }
+            } catch (error) {
+                document.getElementById('output').innerHTML += '<h2>Current Period Error:</h2>' + error.message;
+            }
+        }
+        
+        // Run tests
+        testDebug().then(() => testCurrentPeriod());
+    </script>
+</body>
+</html>

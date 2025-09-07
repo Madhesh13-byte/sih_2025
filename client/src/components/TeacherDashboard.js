@@ -11,7 +11,8 @@ import {
   Save,
   Users,
   FileText,
-  Home
+  Home,
+  Clock
 } from 'lucide-react';
 import './TeacherDashboard.css';
 
@@ -71,6 +72,7 @@ function TeacherDashboard({ user, logout }) {
             >
               <Home size={20} /> Overview
             </button>
+
             <button 
               className={`nav-item ${currentView === 'assignments' ? 'active' : ''}`}
               onClick={() => setCurrentView('assignments')}
@@ -100,6 +102,7 @@ function TeacherDashboard({ user, logout }) {
 
         <main className="teacher-main">
           {currentView === 'overview' && <OverviewSection user={user} assignments={assignments} />}
+
           {currentView === 'assignments' && <AssignmentsSection assignments={assignments} />}
           {currentView === 'grades' && <GradesSection assignments={assignments} />}
           {currentView === 'attendance' && <AttendanceSection assignments={assignments} />}
@@ -109,6 +112,8 @@ function TeacherDashboard({ user, logout }) {
     </div>
   );
 }
+
+
 
 function OverviewSection({ user, assignments }) {
   return (
@@ -267,7 +272,7 @@ function GradesSection({ assignments }) {
           <option value="">Select Subject Assignment</option>
           {assignments.map(assignment => (
             <option key={assignment.id} value={assignment.id}>
-              {assignment.subject_name} - {assignment.department} {assignment.year}
+              {assignment.subject_code} - {assignment.department} {assignment.year}
             </option>
           ))}
         </select>
@@ -282,7 +287,7 @@ function GradesSection({ assignments }) {
 
       {selectedAssignment && gradeType && (
         <div className="grades-table">
-          <h3>Enter Grades - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_name} ({gradeType})</h3>
+          <h3>Enter Grades - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} ({gradeType})</h3>
           <table>
             <thead>
               <tr>
@@ -322,22 +327,37 @@ function GradesSection({ assignments }) {
 function AttendanceSection({ assignments }) {
   const [selectedAssignment, setSelectedAssignment] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedPeriod, setSelectedPeriod] = useState('');
   const [students, setStudents] = useState([]);
+  const [availablePeriods, setAvailablePeriods] = useState([]);
   
   const fetchStudents = async (assignmentId) => {
+    console.log('Fetching students for assignment:', assignmentId);
     try {
       const response = await fetch(`http://localhost:5000/api/staff/students/${assignmentId}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
+      console.log('Students API response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
-        setStudents(data.students.map(student => ({
-          id: student.id,
-          name: student.name,
-          regNo: student.register_no,
-          section: student.section,
-          present: false
-        })));
+        console.log('Students data received:', data);
+        
+        if (data.students && data.students.length > 0) {
+          setStudents(data.students.map(student => ({
+            id: student.id,
+            name: student.name,
+            regNo: student.register_no,
+            section: student.section,
+            present: false
+          })));
+        } else {
+          console.log('No students found in response');
+          setStudents([]);
+        }
+      } else {
+        console.error('Failed to fetch students, response not ok:', response.status);
+        setStudents([]);
       }
     } catch (error) {
       console.error('Failed to fetch students:', error);
@@ -345,9 +365,89 @@ function AttendanceSection({ assignments }) {
     }
   };
   
+  const fetchTimetablePeriods = async (assignmentId) => {
+    try {
+      const assignment = assignments.find(a => a.id.toString() === assignmentId);
+      if (!assignment) return;
+      
+      const response = await fetch(`http://localhost:5000/api/timetables?department=${assignment.department}&year=${assignment.year}&semester=${assignment.semester}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (response.ok) {
+        const timetables = await response.json();
+        const subjectPeriods = timetables.filter(t => 
+          t.subject_code === assignment.subject_code
+        );
+        
+        console.log('Assignment subject_code:', assignment.subject_code);
+        console.log('All timetable subject codes:', timetables.map(t => t.subject_code));
+        console.log('Exact match found:', timetables.some(t => t.subject_code === assignment.subject_code));
+        console.log('Filtered subject periods:', subjectPeriods);
+        
+        const dayOrders = ['I', 'II', 'III', 'IV', 'V'];
+        const periods = [
+          { number: 1, start: '09:15', end: '10:05' },
+          { number: 2, start: '10:05', end: '10:55' },
+          { number: 3, start: '11:05', end: '11:55' },
+          { number: 4, start: '11:55', end: '12:45' },
+          { number: 5, start: '13:25', end: '14:10' },
+          { number: 6, start: '14:10', end: '15:05' },
+          { number: 7, start: '15:15', end: '16:00' },
+          { number: 8, start: '16:00', end: '16:45' }
+        ];
+        
+        const formattedPeriods = subjectPeriods
+          .filter(sp => sp.period_number >= 1 && sp.period_number <= 8 && sp.day_of_week >= 0 && sp.day_of_week <= 4)
+          .map(sp => {
+            const periodInfo = periods[sp.period_number - 1];
+            return {
+              id: `${sp.day_of_week}-${sp.period_number}`,
+              dayOrder: dayOrders[sp.day_of_week],
+              period: sp.period_number,
+              time: `${periodInfo.start}-${periodInfo.end}`,
+              dayOfWeek: sp.day_of_week,
+              periodNumber: sp.period_number
+            };
+          });
+        
+        setAvailablePeriods(formattedPeriods);
+      }
+    } catch (error) {
+      console.error('Failed to fetch timetable periods:', error);
+    }
+  };
+  
+  const calculateDateForDayOrder = (dayOrder) => {
+    // Simple mapping: Day I = Monday, Day II = Tuesday, etc.
+    const today = new Date();
+    const currentDay = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const dayOrderMap = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5 };
+    const targetDay = dayOrderMap[dayOrder];
+    
+    // Calculate days to add/subtract to get to target day
+    let daysToAdd = targetDay - currentDay;
+    if (daysToAdd <= 0) daysToAdd += 7; // Next occurrence
+    
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + daysToAdd);
+    
+    return targetDate.toISOString().split('T')[0];
+  };
+  
+  const handlePeriodChange = (periodId) => {
+    setSelectedPeriod(periodId);
+    const selectedPeriodData = availablePeriods.find(p => p.id === periodId);
+    if (selectedPeriodData) {
+      const newDate = calculateDateForDayOrder(selectedPeriodData.dayOrder);
+      setSelectedDate(newDate);
+    }
+  };
+  
   useEffect(() => {
     if (selectedAssignment) {
       fetchStudents(selectedAssignment);
+      fetchTimetablePeriods(selectedAssignment);
     }
   }, [selectedAssignment]);
 
@@ -375,9 +475,22 @@ function AttendanceSection({ assignments }) {
           <option value="">Select Subject Assignment</option>
           {assignments.map(assignment => (
             <option key={assignment.id} value={assignment.id}>
-              {assignment.subject_name} - {assignment.department} {assignment.year}
+              {assignment.subject_code} - {assignment.department} {assignment.year}
             </option>
           ))}
+        </select>
+        
+        <select value={selectedPeriod} onChange={(e) => handlePeriodChange(e.target.value)}>
+          <option value="">Select Period</option>
+          {availablePeriods.length > 0 ? (
+            availablePeriods.map(period => (
+              <option key={period.id} value={period.id}>
+                Day {period.dayOrder} - Period {period.period} ({period.time})
+              </option>
+            ))
+          ) : (
+            <option disabled>No periods scheduled for this subject</option>
+          )}
         </select>
         
         <input
@@ -391,9 +504,9 @@ function AttendanceSection({ assignments }) {
         </button>
       </div>
 
-      {selectedAssignment && (
+      {selectedAssignment && selectedPeriod && (
         <div className="attendance-table">
-          <h3>Mark Attendance - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_name} ({selectedDate})</h3>
+          <h3>Mark Attendance - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} (Day {availablePeriods.find(p => p.id === selectedPeriod)?.dayOrder} P{availablePeriods.find(p => p.id === selectedPeriod)?.period} - {selectedDate})</h3>
           <table>
             <thead>
               <tr>

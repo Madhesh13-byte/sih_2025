@@ -83,6 +83,42 @@ db.serialize(() => {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // Timetables table
+  db.run(`CREATE TABLE IF NOT EXISTS timetables (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    department TEXT NOT NULL,
+    year TEXT NOT NULL,
+    semester TEXT NOT NULL,
+    day_of_week INTEGER NOT NULL,
+    period_number INTEGER NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    subject_code TEXT NOT NULL,
+    subject_name TEXT NOT NULL,
+    staff_id TEXT NOT NULL,
+    staff_name TEXT NOT NULL,
+    room_number TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(department, year, semester, day_of_week, period_number)
+  )`);
+
+  // Attendance table
+  db.run(`CREATE TABLE IF NOT EXISTS attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    staff_id TEXT NOT NULL,
+    subject_code TEXT NOT NULL,
+    department TEXT NOT NULL,
+    year TEXT NOT NULL,
+    semester TEXT NOT NULL,
+    day_of_week INTEGER NOT NULL,
+    period_number INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    status TEXT NOT NULL,
+    marked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, subject_code, date, period_number)
+  )`);
+
   // Insert default settings
   db.run(`INSERT OR IGNORE INTO admin_settings (setting_key, setting_value) VALUES (?, ?)`,
     ['auto_create_classes', 'true']);
@@ -670,31 +706,320 @@ app.put('/api/admin/notifications/:id/read', authenticateToken, requireAdmin, (r
     });
 });
 
+// Timetable endpoints
+app.post('/api/timetables', authenticateToken, requireAdmin, (req, res) => {
+  const { department, year, semester, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number } = req.body;
+  
+  db.run(
+    `INSERT INTO timetables (department, year, semester, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [department, year, semester, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number],
+    function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(400).json({ error: 'Time slot already occupied' });
+        }
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json({ id: this.lastID, message: 'Timetable entry created successfully' });
+    }
+  );
+});
+
+app.get('/api/timetables', authenticateToken, (req, res) => {
+  const { department, year, semester } = req.query;
+  
+  let query = 'SELECT * FROM timetables';
+  let params = [];
+  
+  if (department || year || semester) {
+    query += ' WHERE ';
+    const conditions = [];
+    if (department) { conditions.push('department = ?'); params.push(department); }
+    if (year) { conditions.push('year = ?'); params.push(year); }
+    if (semester) { conditions.push('semester = ?'); params.push(semester); }
+    query += conditions.join(' AND ');
+  }
+  
+  query += ' ORDER BY day_of_week, period_number';
+  
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json(rows);
+  });
+});
+
+app.delete('/api/timetables/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  
+  db.run('DELETE FROM timetables WHERE id = ?', [id], function(err) {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ message: 'Timetable entry deleted successfully' });
+  });
+});
+
+// Get current period for staff based on timetable (non-realtime)
+app.get('/api/staff/current-period', authenticateToken, (req, res) => {
+  // Get staff info first
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    
+    const staffId = staffInfo?.staff_id || req.user.staff_id;
+    
+    // Get first available timetable entry for this staff (non-realtime)
+    db.get(`SELECT t.* FROM timetables t 
+            WHERE t.staff_id = ? 
+            ORDER BY t.day_of_week, t.period_number 
+            LIMIT 1`,
+      [staffId], (err, timetableEntry) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        
+        if (!timetableEntry) {
+          return res.json({ 
+            message: `No timetable entries found for staff: ${staffId}`,
+            debug: { staffId }
+          });
+        }
+        
+        // Get period info
+        const periods = [
+          { number: 1, start: '09:15', end: '10:05' },
+          { number: 2, start: '10:05', end: '10:55' },
+          { number: 3, start: '11:05', end: '11:55' },
+          { number: 4, start: '11:55', end: '12:45' },
+          { number: 5, start: '13:25', end: '14:10' },
+          { number: 6, start: '14:10', end: '15:05' },
+          { number: 7, start: '15:15', end: '16:00' },
+          { number: 8, start: '16:00', end: '16:45' }
+        ];
+        
+        const periodInfo = periods[timetableEntry.period_number - 1];
+        
+        // Find the class based on department and year
+        db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?',
+          [timetableEntry.department, timetableEntry.year, 'A'], (err, classInfo) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            
+            res.json({
+              currentPeriod: timetableEntry.period_number,
+              timeSlot: `${periodInfo.start}-${periodInfo.end}`,
+              subject: timetableEntry.subject_name,
+              subjectCode: timetableEntry.subject_code,
+              department: timetableEntry.department,
+              year: timetableEntry.year,
+              semester: timetableEntry.semester,
+              room: timetableEntry.room_number,
+              classId: classInfo?.id
+            });
+          });
+      });
+  });
+});
+
+// Mark attendance for current period
+app.post('/api/staff/attendance', authenticateToken, (req, res) => {
+  const { students, subject_code, department, year, semester, day_of_week, period_number } = req.body;
+  const date = new Date().toISOString().split('T')[0];
+  const staff_id = req.user.staff_id || req.user.id;
+  
+  const promises = students.map(student => 
+    new Promise((resolve, reject) => {
+      db.run(`INSERT OR REPLACE INTO attendance 
+              (student_id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, status) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [student.id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, student.status],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    })
+  );
+  
+  Promise.all(promises)
+    .then(() => res.json({ message: 'Attendance marked successfully' }))
+    .catch(err => res.status(500).json({ error: 'Failed to mark attendance' }));
+});
+
+// Get attendance for a specific date and period
+app.get('/api/staff/attendance', authenticateToken, (req, res) => {
+  const { subject_code, date, period_number } = req.query;
+  const staff_id = req.user.staff_id || req.user.id;
+  
+  db.all(`SELECT a.*, u.name, u.register_no FROM attendance a 
+          JOIN users u ON a.student_id = u.id 
+          WHERE a.staff_id = ? AND a.subject_code = ? AND a.date = ? AND a.period_number = ?`,
+    [staff_id, subject_code, date, period_number], (err, rows) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json(rows);
+    });
+});
+
 // Get students for staff assignments (for teachers)
 app.get('/api/staff/students/:assignmentId', authenticateToken, (req, res) => {
   const { assignmentId } = req.params;
   
-  // Get assignment details
-  db.get('SELECT * FROM staff_assignments WHERE id = ? AND staff_id = ?', 
-    [assignmentId, req.user.staff_id || req.user.id], (err, assignment) => {
-      if (err || !assignment) {
-        return res.status(404).json({ error: 'Assignment not found' });
-      }
-      
-      // Get students from classes matching the assignment's department and year
-      db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, c.section 
-              FROM users u 
-              JOIN classes c ON u.class_id = c.id 
-              WHERE u.role = 'student' AND c.department = ? AND c.year = ?
-              ORDER BY c.section, u.register_no`,
-        [assignment.department, assignment.year], (err, students) => {
-          if (err) return res.status(500).json({ error: 'Database error' });
-          
-          res.json({
-            assignment,
-            students
+  // Get staff info first
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    
+    const staffId = staffInfo?.staff_id || req.user.staff_id;
+    console.log('Looking for assignment:', assignmentId, 'for staff:', staffId);
+    
+    // Get assignment details
+    db.get('SELECT * FROM staff_assignments WHERE id = ? AND staff_id = ?', 
+      [assignmentId, staffId], (err, assignment) => {
+        if (err) {
+          console.error('Assignment query error:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        
+        if (!assignment) {
+          console.log('Assignment not found for ID:', assignmentId, 'Staff:', staffId);
+          return res.status(404).json({ error: 'Assignment not found' });
+        }
+        
+        console.log('Found assignment:', assignment);
+        
+        // Get students from classes matching the assignment's department and year
+        db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, c.section 
+                FROM users u 
+                LEFT JOIN classes c ON u.class_id = c.id 
+                WHERE u.role = 'student' AND (c.department = ? AND c.year = ? OR u.department = ?)
+                ORDER BY c.section, u.register_no`,
+          [assignment.department, assignment.year, assignment.department], (err, students) => {
+            if (err) {
+              console.error('Students query error:', err);
+              return res.status(500).json({ error: 'Database error' });
+            }
+            
+            console.log('Found students:', students.length);
+            
+            // If no students found with class matching, get all students from same department
+            if (students.length === 0) {
+              db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, 'A' as section 
+                      FROM users u 
+                      WHERE u.role = 'student' AND u.department = ?
+                      ORDER BY u.register_no`,
+                [assignment.department], (err, allStudents) => {
+                  if (err) return res.status(500).json({ error: 'Database error' });
+                  
+                  console.log('Fallback: Found students from department:', allStudents.length);
+                  
+                  res.json({
+                    assignment,
+                    students: allStudents
+                  });
+                });
+            } else {
+              res.json({
+                assignment,
+                students
+              });
+            }
           });
-        });
+      });
+  });
+});
+
+// Debug endpoint to check data
+app.get('/api/debug/data', authenticateToken, (req, res) => {
+  const now = new Date();
+  const currentDay = now.getDay() - 1;
+  const currentTime = now.toTimeString().slice(0, 5);
+  
+  const queries = {
+    users: 'SELECT id, register_no, staff_id, name, role, department, class_id, joining_year FROM users',
+    classes: 'SELECT * FROM classes',
+    timetables: 'SELECT * FROM timetables',
+    staff_assignments: 'SELECT * FROM staff_assignments'
+  };
+  
+  const results = {
+    currentTime: currentTime,
+    currentDay: currentDay,
+    userInfo: req.user
+  };
+  let completed = 0;
+  
+  Object.keys(queries).forEach(key => {
+    db.all(queries[key], (err, rows) => {
+      if (err) {
+        results[key] = { error: err.message };
+      } else {
+        results[key] = rows;
+      }
+      completed++;
+      
+      if (completed === Object.keys(queries).length) {
+        res.json(results);
+      }
+    });
+  });
+});
+
+// Simple endpoint to get all students (for debugging)
+app.get('/api/debug/students', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM users WHERE role = "student"', (err, students) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json(students);
+  });
+});
+
+// Get student attendance records
+app.get('/api/student/attendance', authenticateToken, (req, res) => {
+  const studentId = req.user.id;
+  
+  db.all(`SELECT a.*, sa.subject_name 
+          FROM attendance a 
+          LEFT JOIN staff_assignments sa ON a.subject_code = sa.subject_code 
+          WHERE a.student_id = ? 
+          ORDER BY a.date DESC, a.period_number`,
+    [studentId], (err, records) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      
+      // Group by subject and calculate percentages
+      const subjectStats = {};
+      
+      records.forEach(record => {
+        if (!subjectStats[record.subject_code]) {
+          subjectStats[record.subject_code] = {
+            subject_code: record.subject_code,
+            subject_name: record.subject_name || record.subject_code,
+            total: 0,
+            present: 0,
+            records: []
+          };
+        }
+        
+        subjectStats[record.subject_code].total++;
+        if (record.status === 'present') {
+          subjectStats[record.subject_code].present++;
+        }
+        subjectStats[record.subject_code].records.push(record);
+      });
+      
+      // Calculate percentages
+      const subjects = Object.values(subjectStats).map(subject => ({
+        ...subject,
+        percentage: subject.total > 0 ? Math.round((subject.present / subject.total) * 100) : 0
+      }));
+      
+      // Overall stats
+      const totalClasses = records.length;
+      const totalPresent = records.filter(r => r.status === 'present').length;
+      const overallPercentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
+      
+      res.json({
+        subjects,
+        overall: {
+          total: totalClasses,
+          present: totalPresent,
+          missed: totalClasses - totalPresent,
+          percentage: overallPercentage
+        },
+        records
+      });
     });
 });
 
