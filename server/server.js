@@ -822,23 +822,37 @@ app.post('/api/staff/attendance', authenticateToken, (req, res) => {
   const date = new Date().toISOString().split('T')[0];
   const staff_id = req.user.staff_id || req.user.id;
   
+  console.log('Saving attendance:', { students: students.length, subject_code, date, staff_id });
+  
   const promises = students.map(student => 
     new Promise((resolve, reject) => {
+      console.log('Saving for student:', student.id, student.status);
       db.run(`INSERT OR REPLACE INTO attendance 
               (student_id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, status) 
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [student.id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, student.status],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
+        function(err) {
+          if (err) {
+            console.error('Attendance save error:', err);
+            reject(err);
+          } else {
+            console.log('Attendance saved for student:', student.id, 'Row ID:', this.lastID);
+            resolve();
+          }
         }
       );
     })
   );
   
   Promise.all(promises)
-    .then(() => res.json({ message: 'Attendance marked successfully' }))
-    .catch(err => res.status(500).json({ error: 'Failed to mark attendance' }));
+    .then(() => {
+      console.log('All attendance records saved successfully');
+      res.json({ message: 'Attendance marked successfully' });
+    })
+    .catch(err => {
+      console.error('Failed to save attendance:', err);
+      res.status(500).json({ error: 'Failed to mark attendance' });
+    });
 });
 
 // Get attendance for a specific date and period
@@ -966,61 +980,98 @@ app.get('/api/debug/students', authenticateToken, (req, res) => {
   });
 });
 
+// Debug endpoint to check all attendance records
+app.get('/api/debug/attendance', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM attendance ORDER BY date DESC, period_number', (err, records) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json(records);
+  });
+});
+
 // Get student attendance records
 app.get('/api/student/attendance', authenticateToken, (req, res) => {
   const studentId = req.user.id;
   
-  db.all(`SELECT a.*, sa.subject_name 
-          FROM attendance a 
-          LEFT JOIN staff_assignments sa ON a.subject_code = sa.subject_code 
-          WHERE a.student_id = ? 
-          ORDER BY a.date DESC, a.period_number`,
-    [studentId], (err, records) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      
-      // Group by subject and calculate percentages
-      const subjectStats = {};
-      
-      records.forEach(record => {
-        if (!subjectStats[record.subject_code]) {
-          subjectStats[record.subject_code] = {
-            subject_code: record.subject_code,
-            subject_name: record.subject_name || record.subject_code,
-            total: 0,
-            present: 0,
-            records: []
-          };
+  console.log('Fetching attendance for student ID:', studentId);
+  
+  // First get student info to match with their department/year
+  db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
+    if (err || !student) {
+      return res.status(500).json({ error: 'Student not found' });
+    }
+    
+    console.log('Student info:', { id: student.id, department: student.department, class_id: student.class_id });
+    
+    // Get attendance records for this student
+    db.all(`SELECT a.*, sa.subject_name, sa.subject_code as sa_subject_code
+            FROM attendance a 
+            LEFT JOIN staff_assignments sa ON (a.subject_code = sa.subject_code AND a.department = sa.department AND a.year = sa.year)
+            WHERE a.student_id = ? 
+            ORDER BY a.date DESC, a.period_number`,
+      [studentId], (err, records) => {
+        if (err) {
+          console.error('Student attendance fetch error:', err);
+          return res.status(500).json({ error: 'Database error' });
         }
         
-        subjectStats[record.subject_code].total++;
-        if (record.status === 'present') {
-          subjectStats[record.subject_code].present++;
+        console.log('Found attendance records:', records.length);
+        if (records.length > 0) {
+          console.log('Sample record:', records[0]);
         }
-        subjectStats[record.subject_code].records.push(record);
+        
+        // Group by subject and calculate percentages
+        const subjectStats = {};
+        
+        records.forEach(record => {
+          const subjectKey = record.subject_code;
+          if (!subjectStats[subjectKey]) {
+            subjectStats[subjectKey] = {
+              subject_code: record.subject_code,
+              subject_name: record.subject_name || record.subject_code,
+              total: 0,
+              present: 0,
+              records: []
+            };
+          }
+          
+          subjectStats[subjectKey].total++;
+          if (record.status === 'present') {
+            subjectStats[subjectKey].present++;
+          }
+          subjectStats[subjectKey].records.push(record);
+        });
+        
+        // Calculate percentages
+        const subjects = Object.values(subjectStats).map(subject => ({
+          ...subject,
+          percentage: subject.total > 0 ? Math.round((subject.present / subject.total) * 100) : 0
+        }));
+        
+        // Overall stats
+        const totalClasses = records.length;
+        const totalPresent = records.filter(r => r.status === 'present').length;
+        const overallPercentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
+        
+        console.log('Returning subjects:', subjects.length, 'Overall:', overallPercentage + '%');
+        
+        res.json({
+          subjects,
+          overall: {
+            total: totalClasses,
+            present: totalPresent,
+            missed: totalClasses - totalPresent,
+            percentage: overallPercentage
+          },
+          records,
+          studentInfo: {
+            id: student.id,
+            name: student.name,
+            department: student.department,
+            class_id: student.class_id
+          }
+        });
       });
-      
-      // Calculate percentages
-      const subjects = Object.values(subjectStats).map(subject => ({
-        ...subject,
-        percentage: subject.total > 0 ? Math.round((subject.present / subject.total) * 100) : 0
-      }));
-      
-      // Overall stats
-      const totalClasses = records.length;
-      const totalPresent = records.filter(r => r.status === 'present').length;
-      const overallPercentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
-      
-      res.json({
-        subjects,
-        overall: {
-          total: totalClasses,
-          present: totalPresent,
-          missed: totalClasses - totalPresent,
-          percentage: overallPercentage
-        },
-        records
-      });
-    });
+  });
 });
 
 // Admin routes

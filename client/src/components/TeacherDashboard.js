@@ -457,9 +457,47 @@ function AttendanceSection({ assignments }) {
     ));
   };
 
-  const saveAttendance = () => {
-    console.log('Saving attendance:', students);
-    alert('Attendance saved successfully!');
+  const saveAttendance = async () => {
+    if (!selectedAssignment || !selectedPeriod) return;
+
+    const assignment = assignments.find(a => a.id.toString() === selectedAssignment);
+    const period = availablePeriods.find(p => p.id === selectedPeriod);
+    
+    console.log('Saving attendance for:', {
+      assignment: assignment?.subject_code,
+      students: students.length,
+      period: period?.dayOfWeek + '-' + period?.periodNumber
+    });
+
+    try {
+      const response = await fetch('http://localhost:5000/api/staff/attendance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          students: students.map(s => ({ id: s.id, status: s.present ? 'present' : 'absent' })),
+          subject_code: assignment?.subject_code,
+          department: assignment?.department,
+          year: assignment?.year,
+          semester: assignment?.semester,
+          day_of_week: period?.dayOfWeek,
+          period_number: period?.periodNumber
+        })
+      });
+
+      if (response.ok) {
+        alert('Attendance saved successfully!');
+        console.log('Attendance saved for', students.length, 'students');
+      } else {
+        console.error('Failed to save attendance:', response.status);
+        alert('Failed to save attendance');
+      }
+    } catch (error) {
+      console.error('Error saving attendance:', error);
+      alert('Error saving attendance');
+    }
   };
 
   const markAllPresent = () => {
