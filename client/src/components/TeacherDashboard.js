@@ -223,6 +223,7 @@ function AssignmentsSection({ assignments }) {
 function GradesSection({ assignments }) {
   const [selectedAssignment, setSelectedAssignment] = useState('');
   const [gradeType, setGradeType] = useState('');
+  const [gradeCategory, setGradeCategory] = useState('');
   const [students, setStudents] = useState([]);
   
   const fetchStudents = async (assignmentId) => {
@@ -237,7 +238,7 @@ function GradesSection({ assignments }) {
           name: student.name,
           regNo: student.register_no,
           section: student.section,
-          grade: ''
+          marks: ''
         })));
       }
     } catch (error) {
@@ -252,22 +253,81 @@ function GradesSection({ assignments }) {
     }
   }, [selectedAssignment]);
 
-  const handleGradeChange = (studentId, grade) => {
+  const handleMarksChange = (studentId, marks) => {
     setStudents(students.map(student => 
-      student.id === studentId ? { ...student, grade } : student
+      student.id === studentId ? { ...student, marks } : student
     ));
   };
 
-  const saveGrades = () => {
-    console.log('Saving grades:', students);
-    alert('Grades saved successfully!');
+  const saveGrades = async () => {
+    if (!selectedAssignment || !gradeType || !gradeCategory) {
+      alert('Please fill all required fields');
+      return;
+    }
+
+    const assignment = assignments.find(a => a.id.toString() === selectedAssignment);
+    const maxMarks = getMaxMarks();
+    
+    try {
+      const response = await fetch('http://localhost:5000/api/staff/grades', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          students: students.map(s => ({ 
+            id: s.id, 
+            marks: gradeType === 'Semester' ? s.marks : parseFloat(s.marks) || 0 
+          })),
+          subject_code: assignment?.subject_code,
+          department: assignment?.department,
+          year: assignment?.year,
+          semester: assignment?.semester,
+          grade_type: gradeType,
+          grade_category: gradeCategory,
+          max_marks: maxMarks
+        })
+      });
+
+      if (response.ok) {
+        alert('Grades saved successfully!');
+      } else {
+        alert('Failed to save grades');
+      }
+    } catch (error) {
+      console.error('Error saving grades:', error);
+      alert('Error saving grades');
+    }
+  };
+
+  const getCategoryOptions = () => {
+    if (gradeType === 'Assignment') {
+      return ['Assignment 1', 'Assignment 2', 'Assignment 3'];
+    } else if (gradeType === 'IA') {
+      return ['IA 1', 'IA 2', 'IA 3'];
+    } else if (gradeType === 'Semester') {
+      return ['Semester Exam'];
+    }
+    return [];
+  };
+
+  const getMaxMarks = () => {
+    if (gradeType === 'Assignment') return 40;
+    if (gradeType === 'IA') return 50;
+    if (gradeType === 'Semester') return 'Grade';
+    return 0;
+  };
+
+  const getGradeOptions = () => {
+    return ['O+', 'O', 'A+', 'A', 'B+', 'B', 'C+', 'C', 'U/A'];
   };
 
   return (
     <div className="grades-section">
       <h2>Grade Management</h2>
       
-      <div className="grade-filters">
+      <div className="grade-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '20px' }}>
         <select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)}>
           <option value="">Select Subject Assignment</option>
           {assignments.map(assignment => (
@@ -277,23 +337,32 @@ function GradesSection({ assignments }) {
           ))}
         </select>
         
-        <select value={gradeType} onChange={(e) => setGradeType(e.target.value)}>
-          <option value="">Grade Type</option>
-          <option value="Assignment">Assignment</option>
-          <option value="Test">Test</option>
-          <option value="Exam">Exam</option>
+        <select value={gradeType} onChange={(e) => { setGradeType(e.target.value); setGradeCategory(''); }}>
+          <option value="">Select Grade Type</option>
+          <option value="Assignment">Assignment (40 marks)</option>
+          <option value="IA">IA (50 marks)</option>
+          <option value="Semester">Semester Exam (Grade)</option>
         </select>
+        
+        {gradeType && (
+          <select value={gradeCategory} onChange={(e) => setGradeCategory(e.target.value)}>
+            <option value="">Select Category</option>
+            {getCategoryOptions().map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {selectedAssignment && gradeType && (
+      {selectedAssignment && gradeType && gradeCategory && (
         <div className="grades-table">
-          <h3>Enter Grades - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} ({gradeType})</h3>
+          <h3>Enter {gradeType === 'Semester' ? 'Grades' : 'Marks'} - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} ({gradeCategory}) - Max: {getMaxMarks()}</h3>
           <table>
             <thead>
               <tr>
                 <th>Register No</th>
                 <th>Student Name</th>
-                <th>Grade/Marks</th>
+                <th>{gradeType === 'Semester' ? 'Grade' : `Marks (out of ${getMaxMarks()})`}</th>
               </tr>
             </thead>
             <tbody>
@@ -302,14 +371,28 @@ function GradesSection({ assignments }) {
                   <td>{student.regNo}</td>
                   <td>{student.name}</td>
                   <td>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={student.grade}
-                      onChange={(e) => handleGradeChange(student.id, e.target.value)}
-                      placeholder="Enter marks"
-                    />
+                    {gradeType === 'Semester' ? (
+                      <select
+                        value={student.marks}
+                        onChange={(e) => handleMarksChange(student.id, e.target.value)}
+                        style={{ width: '100px' }}
+                      >
+                        <option value="">Select Grade</option>
+                        {getGradeOptions().map(grade => (
+                          <option key={grade} value={grade}>{grade}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="number"
+                        min="0"
+                        max={getMaxMarks()}
+                        value={student.marks}
+                        onChange={(e) => handleMarksChange(student.id, e.target.value)}
+                        placeholder="0"
+                        style={{ width: '80px' }}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}

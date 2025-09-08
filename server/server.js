@@ -190,7 +190,8 @@ app.post('/api/student/login', (req, res) => {
         id: user.id, 
         name: user.name, 
         role: user.role,
-        register_no: user.register_no
+        register_no: user.register_no,
+        department: user.department
       } 
     });
   });
@@ -877,7 +878,7 @@ app.get('/api/staff/students/:assignmentId', authenticateToken, (req, res) => {
   db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     
-    const staffId = staffInfo?.staff_id || req.user.staff_id;
+    const staffId = staffInfo?.staff_id || req.user.staff_id || req.user.id;
     console.log('Looking for assignment:', assignmentId, 'for staff:', staffId);
     
     // Get assignment details
@@ -988,6 +989,81 @@ app.get('/api/debug/attendance', authenticateToken, (req, res) => {
   });
 });
 
+// Create grades table
+db.run(`CREATE TABLE IF NOT EXISTS grades (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL,
+  staff_id TEXT NOT NULL,
+  subject_code TEXT NOT NULL,
+  department TEXT NOT NULL,
+  year TEXT NOT NULL,
+  semester TEXT NOT NULL,
+  grade_type TEXT NOT NULL,
+  grade_category TEXT,
+  marks REAL NOT NULL,
+  max_marks REAL NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(student_id, subject_code, grade_type, grade_category)
+)`);
+
+// Save grades endpoint
+app.post('/api/staff/grades', authenticateToken, (req, res) => {
+  const { students, subject_code, department, year, semester, grade_type, grade_category, max_marks } = req.body;
+  const staff_id = req.user.staff_id || req.user.id;
+  
+  console.log('Saving grades:', { students: students.length, subject_code, grade_type, grade_category });
+  
+  const promises = students.map(student => 
+    new Promise((resolve, reject) => {
+      console.log('Saving grade for student:', student.id, 'marks:', student.marks);
+      db.run(`INSERT OR REPLACE INTO grades 
+              (student_id, staff_id, subject_code, department, year, semester, grade_type, grade_category, marks, max_marks) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [student.id, staff_id, subject_code, department, year, semester, grade_type, grade_category, student.marks, max_marks],
+        function(err) {
+          if (err) {
+            console.error('Grade save error:', err);
+            reject(err);
+          } else {
+            console.log('Grade saved for student:', student.id, 'Row ID:', this.lastID);
+            resolve();
+          }
+        }
+      );
+    })
+  );
+  
+  Promise.all(promises)
+    .then(() => {
+      console.log('All grades saved successfully');
+      res.json({ message: 'Grades saved successfully' });
+    })
+    .catch(err => {
+      console.error('Failed to save grades:', err);
+      res.status(500).json({ error: 'Failed to save grades' });
+    });
+});
+
+// Get grades for a subject
+app.get('/api/staff/grades/:assignmentId', authenticateToken, (req, res) => {
+  const { assignmentId } = req.params;
+  const { grade_type, grade_category } = req.query;
+  
+  db.get('SELECT * FROM staff_assignments WHERE id = ?', [assignmentId], (err, assignment) => {
+    if (err || !assignment) return res.status(404).json({ error: 'Assignment not found' });
+    
+    db.all(`SELECT g.*, u.name, u.register_no 
+            FROM grades g 
+            JOIN users u ON g.student_id = u.id 
+            WHERE g.subject_code = ? AND g.grade_type = ? AND g.grade_category = ?
+            ORDER BY u.register_no`,
+      [assignment.subject_code, grade_type, grade_category], (err, grades) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        res.json({ assignment, grades });
+      });
+  });
+});
+
 // Get student attendance records
 app.get('/api/student/attendance', authenticateToken, (req, res) => {
   const studentId = req.user.id;
@@ -1074,12 +1150,124 @@ app.get('/api/student/attendance', authenticateToken, (req, res) => {
   });
 });
 
-// Admin routes
-const adminRoutes = require('./routes/admin');
-app.use('/api/admin', authenticateToken, requireAdmin, (req, res, next) => {
-  req.db = db;
-  next();
-}, adminRoutes);
+// Get student grades
+app.get('/api/student/grades', authenticateToken, (req, res) => {
+  const studentId = req.user.id;
+  
+  console.log('Fetching grades for student ID:', studentId);
+  
+  // Get student info first
+  db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
+    if (err || !student) {
+      return res.status(500).json({ error: 'Student not found' });
+    }
+    
+    console.log('Student info:', { id: student.id, department: student.department, register_no: student.register_no });
+    
+    // Get all grades for this student
+    db.all(`SELECT g.*, sa.subject_name 
+            FROM grades g 
+            LEFT JOIN staff_assignments sa ON (g.subject_code = sa.subject_code AND g.department = sa.department AND g.year = sa.year)
+            WHERE g.student_id = ? 
+            ORDER BY g.subject_code, g.grade_type, g.grade_category`,
+      [studentId], (err, grades) => {
+        if (err) {
+          console.error('Grades fetch error:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+        
+        console.log('Found grades:', grades.length);
+        if (grades.length > 0) {
+          console.log('Sample grade:', grades[0]);
+        }
+        
+        // Group grades by subject and type
+        const subjectGrades = {};
+        
+        grades.forEach(grade => {
+          const key = grade.subject_code;
+          if (!subjectGrades[key]) {
+            subjectGrades[key] = {
+              subject_code: grade.subject_code,
+              subject_name: grade.subject_name || grade.subject_code,
+              assignment1: null,
+              assignment2: null,
+              assignment3: null,
+              ia1: null,
+              ia2: null,
+              ia3: null,
+              grade: null
+            };
+          }
+          
+          if (grade.grade_type === 'Assignment') {
+            if (grade.grade_category === 'Assignment 1') subjectGrades[key].assignment1 = grade.marks;
+            if (grade.grade_category === 'Assignment 2') subjectGrades[key].assignment2 = grade.marks;
+            if (grade.grade_category === 'Assignment 3') subjectGrades[key].assignment3 = grade.marks;
+          } else if (grade.grade_type === 'IA') {
+            if (grade.grade_category === 'IA 1') subjectGrades[key].ia1 = grade.marks;
+            if (grade.grade_category === 'IA 2') subjectGrades[key].ia2 = grade.marks;
+            if (grade.grade_category === 'IA 3') subjectGrades[key].ia3 = grade.marks;
+          } else if (grade.grade_type === 'Semester') {
+            subjectGrades[key].grade = grade.marks;
+          }
+        });
+        
+        const subjects = Object.values(subjectGrades);
+        
+        console.log('Returning subjects with grades:', subjects.length);
+        
+        res.json({
+          assignments: subjects,
+          ias: subjects,
+          semesters: subjects,
+          debug: {
+            studentId,
+            totalGrades: grades.length,
+            rawGrades: grades
+          }
+        });
+      });
+  });
+});
+
+// Debug endpoint to check all grades
+app.get('/api/debug/grades', authenticateToken, (req, res) => {
+  db.all('SELECT * FROM grades ORDER BY created_at DESC', (err, grades) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json(grades);
+  });
+});
+
+// Get subjects assigned to student
+app.get('/api/student/subjects', authenticateToken, (req, res) => {
+  const studentId = req.user.id;
+  
+  db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
+    if (err || !student) {
+      return res.status(500).json({ error: 'Student not found' });
+    }
+    
+    db.all(`SELECT DISTINCT sa.subject_code, sa.subject_name, sa.staff_name, sa.department, sa.year, sa.semester
+            FROM staff_assignments sa
+            WHERE sa.department = ?
+            ORDER BY sa.subject_code`,
+      [student.department], (err, subjects) => {
+        if (err) {
+          return res.status(500).json({ error: 'Database error' });
+        }
+        
+        res.json(subjects);
+      });
+  });
+});
+
+// Admin routes (commented out as routes/admin doesn't exist)
+// const adminRoutes = require('./routes/admin');
+// app.use('/api/admin', authenticateToken, requireAdmin, (req, res, next) => {
+//   req.db = db;
+//   next();
+// }, adminRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

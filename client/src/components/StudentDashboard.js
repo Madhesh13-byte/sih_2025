@@ -181,87 +181,220 @@ function OverviewSection({ user }) {
 }
 
 function AcademicSection({ user }) {
-  const subjects = [];
-  const gpaHistory = [];
+  const [activeTab, setActiveTab] = useState('assignment');
+  const [grades, setGrades] = useState({ assignments: [], ias: [], semesters: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchGrades();
+  }, []);
+
+  const fetchGrades = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/student/grades', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setGrades(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch grades:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderAssignmentTab = () => (
+    <div className="grades-table">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#f8f9fa' }}>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Subject Code</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Subject Name</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>Assignment 1</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>Assignment 2</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>Assignment 3</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grades.assignments.length === 0 ? (
+            <tr>
+              <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#6c757d' }}>
+                No assignment marks available
+              </td>
+            </tr>
+          ) : (
+            grades.assignments.map((subject, index) => (
+              <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8f9fa' }}>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', fontWeight: '500' }}>{subject.subject_code}</td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>{subject.subject_name}</td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {subject.assignment1 !== null ? `${subject.assignment1}/40` : '-'}
+                </td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {subject.assignment2 !== null ? `${subject.assignment2}/40` : '-'}
+                </td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {subject.assignment3 !== null ? `${subject.assignment3}/40` : '-'}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderIATab = () => (
+    <div className="grades-table">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#f8f9fa' }}>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Subject Code</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Subject Name</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>IA 1</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>IA 2</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>IA 3</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grades.ias.length === 0 ? (
+            <tr>
+              <td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#6c757d' }}>
+                No IA marks available
+              </td>
+            </tr>
+          ) : (
+            grades.ias.map((subject, index) => (
+              <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8f9fa' }}>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', fontWeight: '500' }}>{subject.subject_code}</td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>{subject.subject_name}</td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {subject.ia1 !== null ? `${subject.ia1}/50` : '-'}
+                </td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {subject.ia2 !== null ? `${subject.ia2}/50` : '-'}
+                </td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {subject.ia3 !== null ? `${subject.ia3}/50` : '-'}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderSemesterTab = () => (
+    <div className="grades-table">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#f8f9fa' }}>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Subject Code</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Subject Name</th>
+            <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>Semester Grade</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grades.semesters.length === 0 ? (
+            <tr>
+              <td colSpan="3" style={{ padding: '20px', textAlign: 'center', color: '#6c757d' }}>
+                No semester grades available
+              </td>
+            </tr>
+          ) : (
+            grades.semesters.map((subject, index) => (
+              <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8f9fa' }}>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', fontWeight: '500' }}>{subject.subject_code}</td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>{subject.subject_name}</td>
+                <td style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {subject.grade ? (
+                    <span style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontWeight: '600',
+                      backgroundColor: subject.grade.startsWith('O') ? '#d4edda' : 
+                                     subject.grade.startsWith('A') ? '#cce5ff' :
+                                     subject.grade.startsWith('B') ? '#fff3cd' :
+                                     subject.grade.startsWith('C') ? '#ffeaa7' : '#f8d7da',
+                      color: subject.grade.startsWith('O') ? '#155724' :
+                             subject.grade.startsWith('A') ? '#004085' :
+                             subject.grade.startsWith('B') ? '#856404' :
+                             subject.grade.startsWith('C') ? '#b7791f' : '#721c24'
+                    }}>
+                      {subject.grade}
+                    </span>
+                  ) : '-'}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (loading) {
+    return <div style={{ padding: '20px', textAlign: 'center' }}>Loading grades...</div>;
+  }
 
   return (
     <div className="academic-section">
       <h2>Academic Performance</h2>
       
-      <div className="academic-grid">
-        <div className="performance-card">
-          <h3>Current Semester</h3>
-          <div className="current-gpa">
-            <span className="gpa-value">--</span>
-            <span className="gpa-label">GPA</span>
-          </div>
-          <div className="performance-stats">
-            <div className="stat">
-              <span className="label">Best Subject:</span>
-              <span className="value">Not available</span>
-            </div>
-            <div className="stat">
-              <span className="label">Needs Attention:</span>
-              <span className="value">Not available</span>
-            </div>
-            <div className="stat">
-              <span className="label">Class Average:</span>
-              <span className="value">Not available</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="subjects-card">
-          <h3>Subject Performance</h3>
-          <div className="subjects-list">
-            {subjects.length === 0 ? (
-              <div className="empty-state">
-                <BookOpen size={48} />
-                <h3>No Academic Records</h3>
-                <p>Your academic performance will appear here once grades are available</p>
-              </div>
-            ) : (
-              subjects.map((subject, index) => (
-                <div key={index} className="subject-item">
-                  <div className="subject-info">
-                    <span className="subject-name">{subject.name}</span>
-                    <span className="subject-credits">{subject.credits} credits</span>
-                  </div>
-                  <div className="subject-performance">
-                    <span className="subject-score">{subject.score}%</span>
-                    <span className={`subject-grade grade-${subject.grade.replace('+', 'plus')}`}>
-                      {subject.grade}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+      <div className="grade-tabs" style={{ marginBottom: '20px' }}>
+        <button 
+          onClick={() => setActiveTab('assignment')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: activeTab === 'assignment' ? '#007bff' : '#f8f9fa',
+            color: activeTab === 'assignment' ? 'white' : '#6c757d',
+            border: '1px solid #e1e8ed',
+            borderRadius: '6px 0 0 6px',
+            cursor: 'pointer',
+            fontWeight: '500'
+          }}
+        >
+          Assignments
+        </button>
+        <button 
+          onClick={() => setActiveTab('ia')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: activeTab === 'ia' ? '#007bff' : '#f8f9fa',
+            color: activeTab === 'ia' ? 'white' : '#6c757d',
+            border: '1px solid #e1e8ed',
+            borderLeft: 'none',
+            cursor: 'pointer',
+            fontWeight: '500'
+          }}
+        >
+          IA
+        </button>
+        <button 
+          onClick={() => setActiveTab('semester')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: activeTab === 'semester' ? '#007bff' : '#f8f9fa',
+            color: activeTab === 'semester' ? 'white' : '#6c757d',
+            border: '1px solid #e1e8ed',
+            borderLeft: 'none',
+            borderRadius: '0 6px 6px 0',
+            cursor: 'pointer',
+            fontWeight: '500'
+          }}
+        >
+          Semester
+        </button>
       </div>
 
-      <div className="gpa-trend">
-        <h3>GPA Trend</h3>
-        <div className="trend-chart">
-          {gpaHistory.length === 0 ? (
-            <div className="empty-state">
-              <TrendingUp size={48} />
-              <h3>No GPA History</h3>
-              <p>Your semester-wise GPA trend will be displayed here</p>
-            </div>
-          ) : (
-            gpaHistory.map((sem, index) => (
-              <div key={index} className="trend-bar">
-                <div 
-                  className="bar" 
-                  style={{ height: `${(sem.gpa / 10) * 100}%` }}
-                ></div>
-                <span className="bar-label">{sem.semester}</span>
-                <span className="bar-value">{sem.gpa}</span>
-              </div>
-            ))
-          )}
-        </div>
+      <div className="grade-content">
+        {activeTab === 'assignment' && renderAssignmentTab()}
+        {activeTab === 'ia' && renderIATab()}
+        {activeTab === 'semester' && renderSemesterTab()}
       </div>
     </div>
   );
