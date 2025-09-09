@@ -1,0 +1,94 @@
+subject_code,subject_name,department,year,semester,credits
+IP3151,Induction Programme,IT,1,1,0
+HS3152,Professional English – I,IT,1,1,3
+MA3151,Matrices and Calculus,IT,1,1,4
+PH3151,Engineering Physics,IT,1,1,3
+CY3151,Engineering Chemistry,IT,1,1,3
+GE3151,Problem Solving and Python Programming,IT,1,1,3
+GE3152,தமிழ் மரபு / Heritage of Tamils,IT,1,1,3
+GE3171,Problem Solving and Python Programming Laboratory,IT,1,1,2
+BS3171,Physics and Chemistry Laboratory,IT,1,1,2
+GE3172,English Laboratory,IT,1,1,1
+HS3252,Professional English – II,IT,1,2,3
+MA3251,Statistics and Numerical Methods,IT,1,2,3
+PH3256,Physics for Information Science,IT,1,2,3
+BE3251,Basic Electrical and Electronics Engineering,IT,1,2,3
+GE3251,Engineering Graphics,IT,1,2,3
+CS3251,Programming in C,IT,1,2,3
+GE3252,தமிழரும் தொழில்நுட்பமும் / Tamils and Technology,IT,1,2,3
+GE3271,Engineering Practices Laboratory,IT,1,2,2
+CS3271,Programming in C Laboratory,IT,1,2,2
+GE3272,Communication Laboratory / Foreign Language,IT,1,2,1
+MA3354,Discrete Mathematics,IT,2,3,3
+CS3351,Digital Principles and Computer Organization,IT,2,3,3
+CS3352,Foundations of Data Science,IT,2,3,3
+CD3291,Data Structures and Algorithms,IT,2,3,3
+CS3391,Object-Oriented Programming,IT,2,3,3
+CD3281,Data Structures and Algorithms Laboratory,IT,2,3,2
+CS3381,Object-Oriented Programming Laboratory,IT,2,3,2
+CS3361,Data Science Laboratory,IT,2,3,2
+GE3361,Professional Development,IT,2,3,1
+CS3452,Theory of Computation,IT,2,4,3
+CS3491,Artificial Intelligence and Machine Learning,IT,2,4,3
+CS3492,Database Management Systems,IT,2,4,3
+IT3401,Web Essentials,IT,2,4,3
+CS3451,Introduction to Operating Systems,IT,2,4,3
+GE3451,Environmental Sciences and Sustainability,IT,2,4,0
+CS3461,Operating Systems Laboratory,IT,2,4,2
+CS3481,Database Management Systems Laboratory,IT,2,4,2
+CS3591,Computer Networks,IT,3,5,3
+IT3501,Full Stack Web Development,IT,3,5,3
+CS3551,Distributed Computing,IT,3,5,3
+CS3691,Embedded Systems and IOT,IT,3,5,3
+IT3511,Full Stack Web Development Laboratory,IT,3,5,2
+CCS356,Object-Oriented Software Engineering,IT,3,6,3
+IT3681,Mobile Applications Development Laboratory,IT,3,6,2
+GE3791,Human Values and Ethics,IT,4,7,1
+IT3711,Summer internship,IT,4,7,10
+IT3811,Project Work/Internship,IT,4,8,10
+IP3151,Induction Programme,CSE,1,1,0
+HS3152,Professional English – I,CSE,1,1,3
+MA3151,Matrices and Calculus,CSE,1,1,4
+PH3151,Engineering Physics,CSE,1,1,3
+CY3151,Engineering Chemistry,CSE,1,1,3
+GE3151,Problem Solving and Python Programming,CSE,1,1,3
+GE3152,Heritage of Tamils,CSE,1,1,3
+GE3171,Problem Solving and Python Programming Laboratory,CSE,1,1,2
+BS3171,Physics and Chemistry Laboratory,CSE,1,1,2
+GE3172,English Laboratory,CSE,1,1,1
+HS3252,Professional English – II,CSE,1,2,3
+MA3251,Statistics and Numerical Methods,CSE,1,2,3
+PH3256,Physics for Information Science,CSE,1,2,3
+BE3251,Basic Electrical and Electronics Engineering,CSE,1,2,3
+GE3251,Engineering Graphics,CSE,1,2,3
+CS3251,Programming in C,CSE,1,2,3
+GE3252,Tamils and Technology,CSE,1,2,3
+GE3271,Engineering Practices Laboratory,CSE,1,2,2
+CS3271,Programming in C Laboratory,CSE,1,2,2
+GE3272,Communication Laboratory / Foreign Language,CSE,1,2,1
+MA3354,Discrete Mathematics,CSE,2,3,3
+CS3351,Digital Principles and Computer Organization,CSE,2,3,3
+CS3352,Foundations of Data Science,CSE,2,3,3
+CS3301,Data Structures,CSE,2,3,3
+CS3391,Object-Oriented Programming,CSE,2,3,3
+CS3311,Data Structures Laboratory,CSE,2,3,2
+CS3381,Object-Oriented Programming Laboratory,CSE,2,3,2
+CS3361,Data Science Laboratory,CSE,2,3,2
+GE3361,Professional Development,CSE,2,3,1
+CS3452,Theory of Computation,CSE,2,4,3
+CS3491,Artificial Intelligence and Machine Learning,CSE,2,4,3
+CS3492,Database Management Systems,CSE,2,4,3
+CS3401,Algorithms,CSE,2,4,3
+CS3451,Introduction to Operating Systems,CSE,2,4,3
+GE3451,Environmental Sciences and Sustainability,CSE,2,4,0
+CS3461,Operating Systems Laboratory,CSE,2,4,2
+CS3481,Database Management Systems Laboratory,CSE,2,4,2
+CS3591,Computer Networks,CSE,3,5,3
+CS3501,Compiler Design,CSE,3,5,3
+CB3491,Cryptography and Cyber Security,CSE,3,5,3
+CS3551,Distributed Computing,CSE,3,5,3
+CCS356,Object-Oriented Software Engineering,CSE,3,6,3
+CS3691,Embedded Systems and IOT,CSE,3,6,3
+GE3791,Human Values and Ethics,CSE,4,7,1
+CS3711,Summer internship,CSE,4,7,10
+CS3811,Project Work/Internship,CSE,4,8,10

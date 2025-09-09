@@ -183,15 +183,23 @@ function OverviewSection({ user }) {
 function AcademicSection({ user }) {
   const [activeTab, setActiveTab] = useState('assignment');
   const [grades, setGrades] = useState({ assignments: [], ias: [], semesters: [] });
+  const [selectedSemester, setSelectedSemester] = useState('');
+  const [selectedYear, setSelectedYear] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchGrades();
-  }, []);
+  }, [selectedSemester, selectedYear]);
 
   const fetchGrades = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/student/grades', {
+      let url = 'http://localhost:5000/api/student/grades';
+      const params = new URLSearchParams();
+      if (selectedSemester) params.append('semester', selectedSemester);
+      if (selectedYear) params.append('academic_year', selectedYear);
+      if (params.toString()) url += '?' + params.toString();
+      
+      const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       
@@ -344,6 +352,28 @@ function AcademicSection({ user }) {
   return (
     <div className="academic-section">
       <h2>Academic Performance</h2>
+      
+      <div className="semester-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
+        <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)}>
+          <option value="">Current Semester</option>
+          <option value="1">Semester 1</option>
+          <option value="2">Semester 2</option>
+          <option value="3">Semester 3</option>
+          <option value="4">Semester 4</option>
+          <option value="5">Semester 5</option>
+          <option value="6">Semester 6</option>
+          <option value="7">Semester 7</option>
+          <option value="8">Semester 8</option>
+        </select>
+        
+        <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
+          <option value="">Current Year</option>
+          <option value="2024">2024</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+          <option value="2021">2021</option>
+        </select>
+      </div>
       
       <div className="grade-tabs" style={{ marginBottom: '20px' }}>
         <button 

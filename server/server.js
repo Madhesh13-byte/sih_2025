@@ -3,6 +3,9 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3').verbose();
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
 
 const app = express();
 const PORT = 5000;
@@ -41,6 +44,7 @@ db.serialize(() => {
     year TEXT NOT NULL,
     semester TEXT NOT NULL,
     class_id INTEGER,
+    credits INTEGER DEFAULT 3,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
@@ -62,6 +66,19 @@ db.serialize(() => {
     year TEXT NOT NULL,
     section TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Create subjects table if it doesn't exist
+  db.run(`CREATE TABLE IF NOT EXISTS subjects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_code TEXT NOT NULL,
+    subject_name TEXT NOT NULL,
+    department TEXT NOT NULL,
+    year TEXT NOT NULL,
+    semester TEXT NOT NULL,
+    credits INTEGER DEFAULT 3,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(subject_code, department, year, semester)
   )`);
 
   // Admin notifications table
@@ -142,9 +159,50 @@ db.serialize(() => {
     }
   });
   
+  db.run(`ALTER TABLE users ADD COLUMN current_semester INTEGER`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding current_semester column to users:', err);
+    }
+  });
+  
+  db.run(`ALTER TABLE users ADD COLUMN academic_year TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding academic_year column to users:', err);
+    }
+  });
+  
+  db.run(`ALTER TABLE grades ADD COLUMN academic_year TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding academic_year column to grades:', err);
+    }
+  });
+  
   db.run(`ALTER TABLE staff_assignments ADD COLUMN class_id INTEGER`, (err) => {
     if (err && !err.message.includes('duplicate column name')) {
       console.error('Error adding class_id column to staff_assignments:', err);
+    }
+  });
+  
+  db.run(`ALTER TABLE staff_assignments ADD COLUMN credits INTEGER DEFAULT 3`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding credits column to staff_assignments:', err);
+    }
+  });
+  
+  // Migrate existing subjects from staff_assignments to subjects table (admin will set credits)
+  db.all('SELECT DISTINCT subject_code, subject_name, department, year, semester FROM staff_assignments', (err, assignments) => {
+    if (!err && assignments && assignments.length > 0) {
+      assignments.forEach(assignment => {
+        db.run('INSERT OR IGNORE INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES (?, ?, ?, ?, ?, ?)',
+          [assignment.subject_code, assignment.subject_name, assignment.department, assignment.year, assignment.semester, 3],
+          (err) => {
+            if (err && !err.message.includes('UNIQUE constraint failed')) {
+              console.error('Migration error for subject:', assignment.subject_code, err);
+            }
+          }
+        );
+      });
+      console.log('✅ Migrated', assignments.length, 'subjects - Admin needs to set proper credits');
     }
   });
   
@@ -479,7 +537,7 @@ app.put('/api/admin/reset-password/:id', authenticateToken, requireAdmin, async 
 
 // Staff assignments endpoints
 app.post('/api/staff-assignments', authenticateToken, requireAdmin, async (req, res) => {
-  const { staffId, staffName, subjectCode, subjectName, department, year, semester } = req.body;
+  const { staffId, staffName, subjectCode, subjectName, department, year, semester, credits } = req.body;
   
   try {
     const { validateStaffAssignment } = require('./utils/businessLogic');
@@ -493,8 +551,8 @@ app.post('/api/staff-assignments', authenticateToken, requireAdmin, async (req, 
         const class_id = classRow ? classRow.id : null;
         
         db.run(
-          `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, class_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [staffId, staffName, subjectCode, subjectName, department, year, semester, class_id],
+          `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, class_id, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [staffId, staffName, subjectCode, subjectName, department, year, semester, class_id, credits || 3],
           function(err) {
             if (err) {
               return res.status(500).json({ error: 'Database error' });
@@ -819,67 +877,132 @@ app.get('/api/staff/current-period', authenticateToken, (req, res) => {
 
 // Mark attendance for current period
 app.post('/api/staff/attendance', authenticateToken, (req, res) => {
-  const { students, subject_code, department, year, semester, day_of_week, period_number } = req.body;
+  const { students, subject_code, department, year, semester, day_of_week, period_number, academic_year } = req.body;
   const date = new Date().toISOString().split('T')[0];
   const staff_id = req.user.staff_id || req.user.id;
   
-  console.log('Saving attendance:', { students: students.length, subject_code, date, staff_id });
+  console.log('Saving attendance:', { students: students.length, subject_code, date, staff_id, academic_year });
   
-  const promises = students.map(student => 
-    new Promise((resolve, reject) => {
-      console.log('Saving for student:', student.id, student.status);
-      db.run(`INSERT OR REPLACE INTO attendance 
-              (student_id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, status) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [student.id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, student.status],
-        function(err) {
-          if (err) {
-            console.error('Attendance save error:', err);
-            reject(err);
-          } else {
-            console.log('Attendance saved for student:', student.id, 'Row ID:', this.lastID);
-            resolve();
-          }
+  // For historical academic years, use students who had grades in that period
+  if (academic_year && academic_year !== new Date().getFullYear().toString()) {
+    // Get students who had grades in this subject and academic year
+    db.all(`SELECT DISTINCT u.id, u.register_no, u.name 
+            FROM users u 
+            JOIN grades g ON u.id = g.student_id 
+            WHERE g.subject_code = ? AND g.academic_year = ? AND g.staff_id = ?`,
+      [subject_code, academic_year, staff_id], (err, historicalStudents) => {
+        if (err) {
+          console.error('Historical students query error:', err);
+          return res.status(500).json({ error: 'Database error' });
         }
-      );
-    })
-  );
-  
-  Promise.all(promises)
-    .then(() => {
-      console.log('All attendance records saved successfully');
-      res.json({ message: 'Attendance marked successfully' });
-    })
-    .catch(err => {
-      console.error('Failed to save attendance:', err);
-      res.status(500).json({ error: 'Failed to mark attendance' });
-    });
+        
+        // Filter students to only those who existed in that academic year
+        const validStudents = students.filter(student => 
+          historicalStudents.some(hs => hs.id === student.id)
+        );
+        
+        const promises = validStudents.map(student => 
+          new Promise((resolve, reject) => {
+            console.log('Saving historical attendance for student:', student.id, student.status);
+            db.run(`INSERT OR REPLACE INTO attendance 
+                    (student_id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, status) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [student.id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, student.status],
+              function(err) {
+                if (err) {
+                  console.error('Attendance save error:', err);
+                  reject(err);
+                } else {
+                  console.log('Attendance saved for student:', student.id, 'Row ID:', this.lastID);
+                  resolve();
+                }
+              }
+            );
+          })
+        );
+        
+        Promise.all(promises)
+          .then(() => {
+            console.log('All historical attendance records saved successfully');
+            res.json({ message: 'Attendance marked successfully' });
+          })
+          .catch(err => {
+            console.error('Failed to save attendance:', err);
+            res.status(500).json({ error: 'Failed to mark attendance' });
+          });
+      });
+  } else {
+    // Current year logic remains the same
+    const promises = students.map(student => 
+      new Promise((resolve, reject) => {
+        console.log('Saving for student:', student.id, student.status);
+        db.run(`INSERT OR REPLACE INTO attendance 
+                (student_id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [student.id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, student.status],
+          function(err) {
+            if (err) {
+              console.error('Attendance save error:', err);
+              reject(err);
+            } else {
+              console.log('Attendance saved for student:', student.id, 'Row ID:', this.lastID);
+              resolve();
+            }
+          }
+        );
+      })
+    );
+    
+    Promise.all(promises)
+      .then(() => {
+        console.log('All attendance records saved successfully');
+        res.json({ message: 'Attendance marked successfully' });
+      })
+      .catch(err => {
+        console.error('Failed to save attendance:', err);
+        res.status(500).json({ error: 'Failed to mark attendance' });
+      });
+  }
 });
 
 // Get attendance for a specific date and period
 app.get('/api/staff/attendance', authenticateToken, (req, res) => {
-  const { subject_code, date, period_number } = req.query;
+  const { subject_code, date, period_number, academic_year } = req.query;
   const staff_id = req.user.staff_id || req.user.id;
   
-  db.all(`SELECT a.*, u.name, u.register_no FROM attendance a 
-          JOIN users u ON a.student_id = u.id 
-          WHERE a.staff_id = ? AND a.subject_code = ? AND a.date = ? AND a.period_number = ?`,
-    [staff_id, subject_code, date, period_number], (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(rows);
-    });
+  let query = `SELECT a.*, u.name, u.register_no FROM attendance a 
+               JOIN users u ON a.student_id = u.id 
+               WHERE a.staff_id = ? AND a.subject_code = ? AND a.date = ? AND a.period_number = ?`;
+  let params = [staff_id, subject_code, date, period_number];
+  
+  // For historical data, also filter by students who had grades in that academic year
+  if (academic_year && academic_year !== new Date().getFullYear().toString()) {
+    query = `SELECT a.*, u.name, u.register_no FROM attendance a 
+             JOIN users u ON a.student_id = u.id 
+             JOIN grades g ON u.id = g.student_id 
+             WHERE a.staff_id = ? AND a.subject_code = ? AND a.date = ? AND a.period_number = ? 
+             AND g.subject_code = ? AND g.academic_year = ? AND g.staff_id = ?
+             GROUP BY a.id`;
+    params = [staff_id, subject_code, date, period_number, subject_code, academic_year, staff_id];
+  }
+  
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json(rows);
+  });
 });
 
 // Get students for staff assignments (for teachers)
 app.get('/api/staff/students/:assignmentId', authenticateToken, (req, res) => {
   const { assignmentId } = req.params;
+  const { academic_year } = req.query;
   
   // Get staff info first
   db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     
     const staffId = staffInfo?.staff_id || req.user.staff_id || req.user.id;
-    console.log('Looking for assignment:', assignmentId, 'for staff:', staffId);
+    console.log('Looking for assignment:', assignmentId, 'for staff:', staffId, 'academic year:', academic_year);
     
     // Get assignment details
     db.get('SELECT * FROM staff_assignments WHERE id = ? AND staff_id = ?', 
@@ -896,43 +1019,68 @@ app.get('/api/staff/students/:assignmentId', authenticateToken, (req, res) => {
         
         console.log('Found assignment:', assignment);
         
-        // Get students from classes matching the assignment's department and year
-        db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, c.section 
-                FROM users u 
-                LEFT JOIN classes c ON u.class_id = c.id 
-                WHERE u.role = 'student' AND (c.department = ? AND c.year = ? OR u.department = ?)
-                ORDER BY c.section, u.register_no`,
-          [assignment.department, assignment.year, assignment.department], (err, students) => {
-            if (err) {
-              console.error('Students query error:', err);
-              return res.status(500).json({ error: 'Database error' });
-            }
-            
-            console.log('Found students:', students.length);
-            
-            // If no students found with class matching, get all students from same department
-            if (students.length === 0) {
-              db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, 'A' as section 
-                      FROM users u 
-                      WHERE u.role = 'student' AND u.department = ?
-                      ORDER BY u.register_no`,
-                [assignment.department], (err, allStudents) => {
-                  if (err) return res.status(500).json({ error: 'Database error' });
-                  
-                  console.log('Fallback: Found students from department:', allStudents.length);
-                  
-                  res.json({
-                    assignment,
-                    students: allStudents
-                  });
-                });
-            } else {
+        // For historical academic years, get students who have grades in that year
+        if (academic_year && academic_year !== new Date().getFullYear().toString()) {
+          db.all(`SELECT DISTINCT u.id, u.register_no, u.name, u.joining_year, 'A' as section 
+                  FROM users u 
+                  JOIN grades g ON u.id = g.student_id 
+                  WHERE g.subject_code = ? AND g.academic_year = ? AND g.staff_id = ?
+                  ORDER BY u.register_no`,
+            [assignment.subject_code, academic_year, staffId], (err, historicalStudents) => {
+              if (err) {
+                console.error('Historical students query error:', err);
+                return res.status(500).json({ error: 'Database error' });
+              }
+              
+              console.log('Found historical students:', historicalStudents.length);
+              
               res.json({
                 assignment,
-                students
+                students: historicalStudents,
+                isHistorical: true
               });
-            }
-          });
+            });
+        } else {
+          // For current year, use existing logic
+          db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, c.section 
+                  FROM users u 
+                  LEFT JOIN classes c ON u.class_id = c.id 
+                  WHERE u.role = 'student' AND (c.department = ? AND c.year = ? OR u.department = ?)
+                  ORDER BY c.section, u.register_no`,
+            [assignment.department, assignment.year, assignment.department], (err, students) => {
+              if (err) {
+                console.error('Students query error:', err);
+                return res.status(500).json({ error: 'Database error' });
+              }
+              
+              console.log('Found current students:', students.length);
+              
+              // If no students found with class matching, get all students from same department
+              if (students.length === 0) {
+                db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, 'A' as section 
+                        FROM users u 
+                        WHERE u.role = 'student' AND u.department = ?
+                        ORDER BY u.register_no`,
+                  [assignment.department], (err, allStudents) => {
+                    if (err) return res.status(500).json({ error: 'Database error' });
+                    
+                    console.log('Fallback: Found students from department:', allStudents.length);
+                    
+                    res.json({
+                      assignment,
+                      students: allStudents,
+                      isHistorical: false
+                    });
+                  });
+              } else {
+                res.json({
+                  assignment,
+                  students,
+                  isHistorical: false
+                });
+              }
+            });
+        }
       });
   });
 });
@@ -1002,24 +1150,41 @@ db.run(`CREATE TABLE IF NOT EXISTS grades (
   grade_category TEXT,
   marks REAL NOT NULL,
   max_marks REAL NOT NULL,
+  academic_year TEXT DEFAULT '2024',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(student_id, subject_code, grade_type, grade_category)
+  UNIQUE(student_id, subject_code, grade_type, grade_category, academic_year)
+)`);
+
+// Create semester results table
+db.run(`CREATE TABLE IF NOT EXISTS semester_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL,
+  semester INTEGER NOT NULL,
+  academic_year TEXT NOT NULL,
+  sgpa REAL,
+  cgpa REAL,
+  total_credits INTEGER DEFAULT 0,
+  earned_credits INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(student_id, semester, academic_year)
 )`);
 
 // Save grades endpoint
 app.post('/api/staff/grades', authenticateToken, (req, res) => {
-  const { students, subject_code, department, year, semester, grade_type, grade_category, max_marks } = req.body;
+  const { students, subject_code, department, year, semester, grade_type, grade_category, max_marks, academic_year } = req.body;
   const staff_id = req.user.staff_id || req.user.id;
+  const finalAcademicYear = academic_year || new Date().getFullYear().toString();
   
-  console.log('Saving grades:', { students: students.length, subject_code, grade_type, grade_category });
+  console.log('Saving grades:', { students: students.length, subject_code, grade_type, grade_category, academic_year: finalAcademicYear });
   
   const promises = students.map(student => 
     new Promise((resolve, reject) => {
-      console.log('Saving grade for student:', student.id, 'marks:', student.marks);
+      console.log('Saving grade for student:', student.id, 'marks:', student.marks, 'academic_year:', finalAcademicYear);
       db.run(`INSERT OR REPLACE INTO grades 
-              (student_id, staff_id, subject_code, department, year, semester, grade_type, grade_category, marks, max_marks) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [student.id, staff_id, subject_code, department, year, semester, grade_type, grade_category, student.marks, max_marks],
+              (student_id, staff_id, subject_code, department, year, semester, grade_type, grade_category, marks, max_marks, academic_year) 
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [student.id, staff_id, subject_code, department, year, semester, grade_type, grade_category, student.marks, max_marks, finalAcademicYear],
         function(err) {
           if (err) {
             console.error('Grade save error:', err);
@@ -1047,28 +1212,37 @@ app.post('/api/staff/grades', authenticateToken, (req, res) => {
 // Get grades for a subject
 app.get('/api/staff/grades/:assignmentId', authenticateToken, (req, res) => {
   const { assignmentId } = req.params;
-  const { grade_type, grade_category } = req.query;
+  const { grade_type, grade_category, academic_year } = req.query;
   
   db.get('SELECT * FROM staff_assignments WHERE id = ?', [assignmentId], (err, assignment) => {
     if (err || !assignment) return res.status(404).json({ error: 'Assignment not found' });
     
-    db.all(`SELECT g.*, u.name, u.register_no 
-            FROM grades g 
-            JOIN users u ON g.student_id = u.id 
-            WHERE g.subject_code = ? AND g.grade_type = ? AND g.grade_category = ?
-            ORDER BY u.register_no`,
-      [assignment.subject_code, grade_type, grade_category], (err, grades) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        res.json({ assignment, grades });
-      });
+    let query = `SELECT g.*, u.name, u.register_no 
+                 FROM grades g 
+                 JOIN users u ON g.student_id = u.id 
+                 WHERE g.subject_code = ? AND g.grade_type = ? AND g.grade_category = ?`;
+    let params = [assignment.subject_code, grade_type, grade_category];
+    
+    if (academic_year) {
+      query += ` AND g.academic_year = ?`;
+      params.push(academic_year);
+    }
+    
+    query += ` ORDER BY u.register_no`;
+    
+    db.all(query, params, (err, grades) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      res.json({ assignment, grades });
+    });
   });
 });
 
 // Get student attendance records
 app.get('/api/student/attendance', authenticateToken, (req, res) => {
   const studentId = req.user.id;
+  const { semester, academic_year } = req.query;
   
-  console.log('Fetching attendance for student ID:', studentId);
+  console.log('Fetching attendance for student ID:', studentId, 'semester:', semester, 'academic_year:', academic_year);
   
   // First get student info to match with their department/year
   db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
@@ -1078,83 +1252,108 @@ app.get('/api/student/attendance', authenticateToken, (req, res) => {
     
     console.log('Student info:', { id: student.id, department: student.department, class_id: student.class_id });
     
+    // Build query with filters
+    let query = `SELECT a.*, sa.subject_name, sa.subject_code as sa_subject_code
+                 FROM attendance a 
+                 LEFT JOIN staff_assignments sa ON (a.subject_code = sa.subject_code AND a.department = sa.department AND a.year = sa.year)
+                 WHERE a.student_id = ?`;
+    let params = [studentId];
+    
+    if (semester) {
+      query += ` AND a.semester = ?`;
+      params.push(semester);
+    }
+    
+    // For historical academic years, only show attendance for subjects where student had grades
+    if (academic_year && academic_year !== new Date().getFullYear().toString()) {
+      query = `SELECT a.*, sa.subject_name, sa.subject_code as sa_subject_code
+               FROM attendance a 
+               LEFT JOIN staff_assignments sa ON (a.subject_code = sa.subject_code AND a.department = sa.department AND a.year = sa.year)
+               JOIN grades g ON (a.student_id = g.student_id AND a.subject_code = g.subject_code)
+               WHERE a.student_id = ? AND g.academic_year = ?`;
+      params = [studentId, academic_year];
+      
+      if (semester) {
+        query += ` AND a.semester = ?`;
+        params.push(semester);
+      }
+    }
+    
+    query += ` ORDER BY a.date DESC, a.period_number`;
+    
     // Get attendance records for this student
-    db.all(`SELECT a.*, sa.subject_name, sa.subject_code as sa_subject_code
-            FROM attendance a 
-            LEFT JOIN staff_assignments sa ON (a.subject_code = sa.subject_code AND a.department = sa.department AND a.year = sa.year)
-            WHERE a.student_id = ? 
-            ORDER BY a.date DESC, a.period_number`,
-      [studentId], (err, records) => {
-        if (err) {
-          console.error('Student attendance fetch error:', err);
-          return res.status(500).json({ error: 'Database error' });
+    db.all(query, params, (err, records) => {
+      if (err) {
+        console.error('Student attendance fetch error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      console.log('Found attendance records:', records.length);
+      if (records.length > 0) {
+        console.log('Sample record:', records[0]);
+      }
+      
+      // Group by subject and calculate percentages
+      const subjectStats = {};
+      
+      records.forEach(record => {
+        const subjectKey = record.subject_code;
+        if (!subjectStats[subjectKey]) {
+          subjectStats[subjectKey] = {
+            subject_code: record.subject_code,
+            subject_name: record.subject_name || record.subject_code,
+            total: 0,
+            present: 0,
+            records: []
+          };
         }
         
-        console.log('Found attendance records:', records.length);
-        if (records.length > 0) {
-          console.log('Sample record:', records[0]);
+        subjectStats[subjectKey].total++;
+        if (record.status === 'present') {
+          subjectStats[subjectKey].present++;
         }
-        
-        // Group by subject and calculate percentages
-        const subjectStats = {};
-        
-        records.forEach(record => {
-          const subjectKey = record.subject_code;
-          if (!subjectStats[subjectKey]) {
-            subjectStats[subjectKey] = {
-              subject_code: record.subject_code,
-              subject_name: record.subject_name || record.subject_code,
-              total: 0,
-              present: 0,
-              records: []
-            };
-          }
-          
-          subjectStats[subjectKey].total++;
-          if (record.status === 'present') {
-            subjectStats[subjectKey].present++;
-          }
-          subjectStats[subjectKey].records.push(record);
-        });
-        
-        // Calculate percentages
-        const subjects = Object.values(subjectStats).map(subject => ({
-          ...subject,
-          percentage: subject.total > 0 ? Math.round((subject.present / subject.total) * 100) : 0
-        }));
-        
-        // Overall stats
-        const totalClasses = records.length;
-        const totalPresent = records.filter(r => r.status === 'present').length;
-        const overallPercentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
-        
-        console.log('Returning subjects:', subjects.length, 'Overall:', overallPercentage + '%');
-        
-        res.json({
-          subjects,
-          overall: {
-            total: totalClasses,
-            present: totalPresent,
-            missed: totalClasses - totalPresent,
-            percentage: overallPercentage
-          },
-          records,
-          studentInfo: {
-            id: student.id,
-            name: student.name,
-            department: student.department,
-            class_id: student.class_id
-          }
-        });
+        subjectStats[subjectKey].records.push(record);
       });
+      
+      // Calculate percentages
+      const subjects = Object.values(subjectStats).map(subject => ({
+        ...subject,
+        percentage: subject.total > 0 ? Math.round((subject.present / subject.total) * 100) : 0
+      }));
+      
+      // Overall stats
+      const totalClasses = records.length;
+      const totalPresent = records.filter(r => r.status === 'present').length;
+      const overallPercentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
+      
+      console.log('Returning subjects:', subjects.length, 'Overall:', overallPercentage + '%');
+      
+      res.json({
+        subjects,
+        overall: {
+          total: totalClasses,
+          present: totalPresent,
+          missed: totalClasses - totalPresent,
+          percentage: overallPercentage
+        },
+        records,
+        studentInfo: {
+          id: student.id,
+          name: student.name,
+          department: student.department,
+          class_id: student.class_id
+        }
+      });
+    });
   });
 });
 
 // Get student grades
 app.get('/api/student/grades', authenticateToken, (req, res) => {
   const studentId = req.user.id;
+  const { semester, academic_year } = req.query;
   
-  console.log('Fetching grades for student ID:', studentId);
+  console.log('Fetching grades for student ID:', studentId, 'semester:', semester, 'academic_year:', academic_year);
   
   // Get student info first
   db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
@@ -1164,70 +1363,84 @@ app.get('/api/student/grades', authenticateToken, (req, res) => {
     
     console.log('Student info:', { id: student.id, department: student.department, register_no: student.register_no });
     
+    // Build query with filters
+    let query = `SELECT g.*, sa.subject_name 
+                 FROM grades g 
+                 LEFT JOIN staff_assignments sa ON (g.subject_code = sa.subject_code AND g.department = sa.department AND g.year = sa.year)
+                 WHERE g.student_id = ?`;
+    let params = [studentId];
+    
+    if (semester) {
+      query += ` AND g.semester = ?`;
+      params.push(semester);
+    }
+    
+    if (academic_year) {
+      query += ` AND g.academic_year = ?`;
+      params.push(academic_year);
+    }
+    
+    query += ` ORDER BY g.subject_code, g.grade_type, g.grade_category`;
+    
     // Get all grades for this student
-    db.all(`SELECT g.*, sa.subject_name 
-            FROM grades g 
-            LEFT JOIN staff_assignments sa ON (g.subject_code = sa.subject_code AND g.department = sa.department AND g.year = sa.year)
-            WHERE g.student_id = ? 
-            ORDER BY g.subject_code, g.grade_type, g.grade_category`,
-      [studentId], (err, grades) => {
-        if (err) {
-          console.error('Grades fetch error:', err);
-          return res.status(500).json({ error: 'Database error' });
+    db.all(query, params, (err, grades) => {
+      if (err) {
+        console.error('Grades fetch error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      console.log('Found grades:', grades.length);
+      if (grades.length > 0) {
+        console.log('Sample grade:', grades[0]);
+      }
+      
+      // Group grades by subject and type
+      const subjectGrades = {};
+      
+      grades.forEach(grade => {
+        const key = grade.subject_code;
+        if (!subjectGrades[key]) {
+          subjectGrades[key] = {
+            subject_code: grade.subject_code,
+            subject_name: grade.subject_name || grade.subject_code,
+            assignment1: null,
+            assignment2: null,
+            assignment3: null,
+            ia1: null,
+            ia2: null,
+            ia3: null,
+            grade: null
+          };
         }
         
-        console.log('Found grades:', grades.length);
-        if (grades.length > 0) {
-          console.log('Sample grade:', grades[0]);
+        if (grade.grade_type === 'Assignment') {
+          if (grade.grade_category === 'Assignment 1') subjectGrades[key].assignment1 = grade.marks;
+          if (grade.grade_category === 'Assignment 2') subjectGrades[key].assignment2 = grade.marks;
+          if (grade.grade_category === 'Assignment 3') subjectGrades[key].assignment3 = grade.marks;
+        } else if (grade.grade_type === 'IA') {
+          if (grade.grade_category === 'IA 1') subjectGrades[key].ia1 = grade.marks;
+          if (grade.grade_category === 'IA 2') subjectGrades[key].ia2 = grade.marks;
+          if (grade.grade_category === 'IA 3') subjectGrades[key].ia3 = grade.marks;
+        } else if (grade.grade_type === 'Semester') {
+          subjectGrades[key].grade = grade.marks;
         }
-        
-        // Group grades by subject and type
-        const subjectGrades = {};
-        
-        grades.forEach(grade => {
-          const key = grade.subject_code;
-          if (!subjectGrades[key]) {
-            subjectGrades[key] = {
-              subject_code: grade.subject_code,
-              subject_name: grade.subject_name || grade.subject_code,
-              assignment1: null,
-              assignment2: null,
-              assignment3: null,
-              ia1: null,
-              ia2: null,
-              ia3: null,
-              grade: null
-            };
-          }
-          
-          if (grade.grade_type === 'Assignment') {
-            if (grade.grade_category === 'Assignment 1') subjectGrades[key].assignment1 = grade.marks;
-            if (grade.grade_category === 'Assignment 2') subjectGrades[key].assignment2 = grade.marks;
-            if (grade.grade_category === 'Assignment 3') subjectGrades[key].assignment3 = grade.marks;
-          } else if (grade.grade_type === 'IA') {
-            if (grade.grade_category === 'IA 1') subjectGrades[key].ia1 = grade.marks;
-            if (grade.grade_category === 'IA 2') subjectGrades[key].ia2 = grade.marks;
-            if (grade.grade_category === 'IA 3') subjectGrades[key].ia3 = grade.marks;
-          } else if (grade.grade_type === 'Semester') {
-            subjectGrades[key].grade = grade.marks;
-          }
-        });
-        
-        const subjects = Object.values(subjectGrades);
-        
-        console.log('Returning subjects with grades:', subjects.length);
-        
-        res.json({
-          assignments: subjects,
-          ias: subjects,
-          semesters: subjects,
-          debug: {
-            studentId,
-            totalGrades: grades.length,
-            rawGrades: grades
-          }
-        });
       });
+      
+      const subjects = Object.values(subjectGrades);
+      
+      console.log('Returning subjects with grades:', subjects.length);
+      
+      res.json({
+        assignments: subjects,
+        ias: subjects,
+        semesters: subjects,
+        debug: {
+          studentId,
+          totalGrades: grades.length,
+          rawGrades: grades
+        }
+      });
+    });
   });
 });
 
@@ -1239,26 +1452,430 @@ app.get('/api/debug/grades', authenticateToken, (req, res) => {
   });
 });
 
+// Subjects management endpoints
+app.post('/api/subjects', authenticateToken, requireAdmin, (req, res) => {
+  const { subject_code, subject_name, department, year, semester, credits } = req.body;
+  
+  db.run(
+    `INSERT INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES (?, ?, ?, ?, ?, ?)`,
+    [subject_code, subject_name, department, year, semester, credits || 3],
+    function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(400).json({ error: 'Subject code already exists' });
+        }
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json({ id: this.lastID, message: 'Subject created successfully' });
+    }
+  );
+});
+
+app.get('/api/subjects', authenticateToken, (req, res) => {
+  const { department, year, semester } = req.query;
+  
+  let query = 'SELECT * FROM subjects';
+  let params = [];
+  
+  if (department || year || semester) {
+    query += ' WHERE ';
+    const conditions = [];
+    if (department) { conditions.push('department = ?'); params.push(department); }
+    if (year) { conditions.push('year = ?'); params.push(year); }
+    if (semester) { conditions.push('semester = ?'); params.push(semester); }
+    query += conditions.join(' AND ');
+  }
+  
+  query += ' ORDER BY department, year, semester, subject_code';
+  
+  db.all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json(rows);
+  });
+});
+
+app.delete('/api/subjects/:id', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  
+  db.run('DELETE FROM subjects WHERE id = ?', [id], function(err) {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ message: 'Subject deleted successfully' });
+  });
+});
+
+// Clear all subjects
+app.delete('/api/subjects', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM subjects', function(err) {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ message: `${this.changes} subjects deleted successfully` });
+  });
+});
+
+// Delete all students
+app.delete('/api/students', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM users WHERE role = "student"', function(err) {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ message: `${this.changes} students deleted successfully` });
+  });
+});
+
+// Delete all accounts (students and staff)
+app.delete('/api/admin/delete-all-accounts', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM users WHERE role IN ("student", "staff")', function(err) {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ message: `${this.changes} accounts deleted successfully` });
+  });
+});
+
 // Get subjects assigned to student
 app.get('/api/student/subjects', authenticateToken, (req, res) => {
   const studentId = req.user.id;
+  const { semester } = req.query;
   
   db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
     if (err || !student) {
       return res.status(500).json({ error: 'Student not found' });
     }
     
-    db.all(`SELECT DISTINCT sa.subject_code, sa.subject_name, sa.staff_name, sa.department, sa.year, sa.semester
-            FROM staff_assignments sa
-            WHERE sa.department = ?
-            ORDER BY sa.subject_code`,
-      [student.department], (err, subjects) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
+    let query = `SELECT DISTINCT s.subject_code, s.subject_name, s.credits, sa.staff_name, s.department, s.year, s.semester
+                 FROM subjects s
+                 LEFT JOIN staff_assignments sa ON (s.subject_code = sa.subject_code AND s.department = sa.department AND s.year = sa.year)
+                 WHERE s.department = ?`;
+    let params = [student.department];
+    
+    // Filter by current semester by default, or specified semester
+    const filterSemester = semester || student.current_semester || '1';
+    query += ` AND s.semester = ?`;
+    params.push(filterSemester);
+    
+    query += ` ORDER BY s.subject_code`;
+    
+    db.all(query, params, (err, subjects) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      res.json(subjects);
+    });
+  });
+});
+
+// CSV upload configuration
+const upload = multer({ dest: 'uploads/' });
+
+// Bulk import subjects from CSV
+app.post('/api/subjects/import', authenticateToken, requireAdmin, upload.single('csvFile'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No CSV file uploaded' });
+  }
+
+  const subjects = [];
+  
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      if (data.subject_code && data.subject_name && data.department && data.year && data.semester) {
+        subjects.push([
+          data.subject_code.trim(),
+          data.subject_name.trim(), 
+          data.department.trim(),
+          data.year.trim(),
+          data.semester.trim(),
+          parseInt(data.credits) || 3
+        ]);
+      }
+    })
+    .on('end', () => {
+      if (subjects.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'No valid subjects found' });
+      }
+
+      let imported = 0;
+      
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
         
-        res.json(subjects);
+        const stmt = db.prepare('INSERT INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES (?, ?, ?, ?, ?, ?)');
+        let duplicates = 0;
+        
+        subjects.forEach(subject => {
+          try {
+            stmt.run(subject);
+            imported++;
+          } catch (err) {
+            if (err.code === 'SQLITE_CONSTRAINT') {
+              duplicates++;
+            }
+          }
+        });
+        
+        stmt.finalize();
+        
+        db.run('COMMIT', (err) => {
+          fs.unlinkSync(req.file.path);
+          
+          if (err) {
+            return res.status(500).json({ error: 'Import failed' });
+          }
+          
+          // Get actual count from database
+          db.get('SELECT COUNT(*) as total FROM subjects', (err, result) => {
+            res.json({
+              message: `${imported} new subjects added, ${duplicates} duplicates skipped, ${result.total} total in database`,
+              imported,
+              duplicates,
+              total: result.total
+            });
+          });
+        });
       });
+    })
+    .on('error', () => {
+      fs.unlinkSync(req.file.path);
+      res.status(500).json({ error: 'CSV processing failed' });
+    });
+});
+
+// Get CSV templates
+app.get('/api/subjects/template', authenticateToken, requireAdmin, (req, res) => {
+  const csvContent = 'subject_code,subject_name,department,year,semester,credits\n' +
+                    'CS101,Programming Fundamentals,Computer Science,1,1,4\n' +
+                    'CS102,Data Structures,Computer Science,1,2,4\n' +
+                    'CS103,Database Systems,Computer Science,2,1,3\n' +
+                    'CS104L,Programming Lab,Computer Science,1,1,2';
+  
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=subjects_template.csv');
+  res.send(csvContent);
+});
+
+app.get('/api/students/template', authenticateToken, requireAdmin, (req, res) => {
+  const csvContent = 'name,email,department,year,dob\n' +
+                    'John Doe,john@email.com,CSE,25,150805\n' +
+                    'Jane Smith,jane@email.com,IT,25,221204\n' +
+                    'Mike Johnson,mike@email.com,AIDS,25,100306';
+  
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=students_template.csv');
+  res.send(csvContent);
+});
+
+app.get('/api/staff/template', authenticateToken, requireAdmin, (req, res) => {
+  const csvContent = 'name,email,department\n' +
+                    'John Teacher,john@email.com,CSE\n' +
+                    'Jane Professor,jane@email.com,IT\n' +
+                    'Mike Lecturer,mike@email.com,AIDS';
+  
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=staff_template.csv');
+  res.send(csvContent);
+});
+
+// Bulk import students from CSV
+app.post('/api/students/import', authenticateToken, requireAdmin, upload.single('csvFile'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No CSV file uploaded' });
+  }
+
+  const students = [];
+  
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      console.log('Raw CSV data:', JSON.stringify(data));
+      console.log('Available keys:', Object.keys(data));
+      const values = Object.values(data);
+      const student = {
+        name: values[0] || 'Student',
+        email: values[1] || null,
+        department: values[2] || 'IT',
+        year: values[3] || '25',
+        dob: values[4] || '010100'
+      };
+      console.log('Parsed student:', student);
+      students.push(student);
+    })
+    .on('end', async () => {
+      console.log('Total students parsed:', students.length);
+      if (students.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'No valid students found' });
+      }
+
+      let imported = 0;
+      const errors = [];
+      
+      for (let i = 0; i < students.length; i++) {
+        const student = students[i];
+        
+        console.log('Processing student:', student);
+        
+        try {
+          // Get next student number
+          const deptCode = student.department.toUpperCase().substring(0, 2);
+          const yearCode = student.year.toString().slice(-2);
+          
+          const response = await new Promise((resolve, reject) => {
+            db.get(`SELECT COUNT(*) as count FROM users WHERE register_no LIKE 'STU${deptCode}${yearCode}%'`, (err, row) => {
+              if (err) reject(err);
+              else resolve(row.count + 1);
+            });
+          });
+          
+          const numStr = (response).toString().padStart(2, '0');
+          const register_no = `STU${deptCode}${yearCode}${numStr}`;
+          const password = student.dob.toString().padStart(6, '0');
+          console.log('Generated password for', student.name, ':', password);
+          const hashedPassword = await bcrypt.hash(password, 10);
+          const joiningYear = 2000 + parseInt(student.year);
+          
+          // Check auto-creation setting
+          const autoCreateEnabled = await new Promise((resolve, reject) => {
+            db.get('SELECT setting_value FROM admin_settings WHERE setting_key = ?', 
+              ['auto_create_classes'], (err, row) => {
+                if (err) reject(err);
+                else resolve(row ? row.setting_value === 'true' : true);
+              });
+          });
+          
+          // Auto-assign to class
+          let classResult = null;
+          if (autoCreateEnabled) {
+            classResult = await new Promise((resolve, reject) => {
+              db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?',
+                [student.department, 'I', 'A'], (err, classRow) => {
+                  if (err) reject(err);
+                  else resolve(classRow ? classRow.id : null);
+                }
+              );
+            });
+            
+            // Create class if it doesn't exist
+            if (!classResult) {
+              classResult = await new Promise((resolve, reject) => {
+                db.run('INSERT INTO classes (department, year, section) VALUES (?, ?, ?)',
+                  [student.department, 'I', 'A'], function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                  }
+                );
+              });
+            }
+          }
+          
+          await new Promise((resolve, reject) => {
+            console.log('Creating user:', { register_no, name: student.name, password, hashedPassword: hashedPassword.substring(0, 10) + '...' });
+            db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [register_no, student.name, student.email, hashedPassword, 'student', student.department, joiningYear, classResult, req.user.id],
+              function(err) {
+                if (err) reject(err);
+                else { imported++; resolve(); }
+              }
+            );
+          });
+        } catch (error) {
+          errors.push(`Row ${i + 1}: ${error.message}`);
+        }
+      }
+      
+      fs.unlinkSync(req.file.path);
+      console.log('Final result:', { imported, errors: errors.length, totalStudents: students.length });
+      res.json({
+        message: `${imported} students imported, ${errors.length} errors`,
+        imported,
+        errors: errors.slice(0, 5)
+      });
+    })
+    .on('error', () => {
+      fs.unlinkSync(req.file.path);
+      res.status(500).json({ error: 'CSV processing failed' });
+    });
+});
+
+// Bulk import staff from CSV
+app.post('/api/staff/import', authenticateToken, requireAdmin, upload.single('csvFile'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No CSV file uploaded' });
+  }
+
+  const staff = [];
+  
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      console.log('CSV row data:', data);
+      const values = Object.values(data);
+      const staffMember = {
+        name: values[0] || 'Staff',
+        email: values[1] || null,
+        department: values[2] || 'IT'
+      };
+      console.log('Parsed staff:', staffMember);
+      staff.push(staffMember);
+    })
+    .on('end', async () => {
+      if (staff.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'No valid staff found' });
+      }
+
+      let imported = 0;
+      const errors = [];
+      
+      for (let i = 0; i < staff.length; i++) {
+        const member = staff[i];
+        
+        try {
+          // Get next staff number
+          const deptCode = member.department.toUpperCase().substring(0, 3);
+          
+          const response = await new Promise((resolve, reject) => {
+            db.get(`SELECT COUNT(*) as count FROM users WHERE staff_id LIKE 'STF${deptCode}%'`, (err, row) => {
+              if (err) reject(err);
+              else resolve(row.count + 1);
+            });
+          });
+          
+          const numStr = response.toString().padStart(3, '0');
+          const staff_id = `STF${deptCode}${numStr}`;
+          const name = member.name.toLowerCase().replace(/\s+/g, '');
+          const dept = member.department.toLowerCase();
+          const password = `${name}@${dept}`;
+          const hashedPassword = await bcrypt.hash(password, 10);
+          
+          await new Promise((resolve, reject) => {
+            db.run('INSERT INTO users (staff_id, name, email, password, role, department, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [staff_id, member.name, member.email, hashedPassword, 'staff', member.department, req.user.id],
+              function(err) {
+                if (err) reject(err);
+                else { imported++; resolve(); }
+              }
+            );
+          });
+        } catch (error) {
+          errors.push(`Row ${i + 1}: ${error.message}`);
+        }
+      }
+      
+      fs.unlinkSync(req.file.path);
+      res.json({
+        message: `${imported} staff imported, ${errors.length} errors`,
+        imported,
+        errors: errors.slice(0, 5)
+      });
+    })
+    .on('error', () => {
+      fs.unlinkSync(req.file.path);
+      res.status(500).json({ error: 'CSV processing failed' });
+    });
+});
+
+// Get all subjects for admin
+app.get('/api/admin/subjects', authenticateToken, requireAdmin, (req, res) => {
+  db.all('SELECT * FROM subjects ORDER BY department, year, semester, subject_code', (err, subjects) => {
+    if (err) return res.status(500).json({ error: 'Failed to fetch subjects' });
+    res.json(subjects);
   });
 });
 
@@ -1271,10 +1888,7 @@ app.get('/api/student/subjects', authenticateToken, (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log('✅ Enhanced auto-creation system with:');
-  console.log('  - Admin notifications for class creation');
-  console.log('  - Department/year validation');
-  console.log('  - Proper capacity checking');
-  console.log('  - Rollback mechanism');
-  console.log('  - Optional auto-creation toggle');
+  console.log('✅ Subject management system ready');
+  console.log('  - Subjects migrated with default 3 credits');
+  console.log('  - Admin can update credits via Subject Management');
 });

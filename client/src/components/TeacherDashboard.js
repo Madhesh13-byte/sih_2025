@@ -224,11 +224,16 @@ function GradesSection({ assignments }) {
   const [selectedAssignment, setSelectedAssignment] = useState('');
   const [gradeType, setGradeType] = useState('');
   const [gradeCategory, setGradeCategory] = useState('');
+  const [academicYear, setAcademicYear] = useState('');
   const [students, setStudents] = useState([]);
   
   const fetchStudents = async (assignmentId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/staff/students/${assignmentId}`, {
+      const url = academicYear ? 
+        `http://localhost:5000/api/staff/students/${assignmentId}?academic_year=${academicYear}` :
+        `http://localhost:5000/api/staff/students/${assignmentId}`;
+      
+      const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {
@@ -251,7 +256,7 @@ function GradesSection({ assignments }) {
     if (selectedAssignment) {
       fetchStudents(selectedAssignment);
     }
-  }, [selectedAssignment]);
+  }, [selectedAssignment, academicYear]);
 
   const handleMarksChange = (studentId, marks) => {
     setStudents(students.map(student => 
@@ -286,7 +291,8 @@ function GradesSection({ assignments }) {
           semester: assignment?.semester,
           grade_type: gradeType,
           grade_category: gradeCategory,
-          max_marks: maxMarks
+          max_marks: maxMarks,
+          academic_year: academicYear || new Date().getFullYear().toString()
         })
       });
 
@@ -327,7 +333,7 @@ function GradesSection({ assignments }) {
     <div className="grades-section">
       <h2>Grade Management</h2>
       
-      <div className="grade-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '20px' }}>
+      <div className="grade-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
         <select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)}>
           <option value="">Select Subject Assignment</option>
           {assignments.map(assignment => (
@@ -352,11 +358,18 @@ function GradesSection({ assignments }) {
             ))}
           </select>
         )}
+        
+        <select value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}>
+          <option value="">Current Year (2024)</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+          <option value="2021">2021</option>
+        </select>
       </div>
 
       {selectedAssignment && gradeType && gradeCategory && (
         <div className="grades-table">
-          <h3>Enter {gradeType === 'Semester' ? 'Grades' : 'Marks'} - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} ({gradeCategory}) - Max: {getMaxMarks()}</h3>
+          <h3>Enter {gradeType === 'Semester' ? 'Grades' : 'Marks'} - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} ({gradeCategory}) - Max: {getMaxMarks()} {academicYear && `(Academic Year: ${academicYear})`}</h3>
           <table>
             <thead>
               <tr>
@@ -413,6 +426,7 @@ function AttendanceSection({ assignments }) {
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [students, setStudents] = useState([]);
   const [availablePeriods, setAvailablePeriods] = useState([]);
+  const [academicYear, setAcademicYear] = useState('');
   
   const fetchStudents = async (assignmentId) => {
     console.log('Fetching students for assignment:', assignmentId);
@@ -566,7 +580,8 @@ function AttendanceSection({ assignments }) {
           year: assignment?.year,
           semester: assignment?.semester,
           day_of_week: period?.dayOfWeek,
-          period_number: period?.periodNumber
+          period_number: period?.periodNumber,
+          academic_year: new Date().getFullYear().toString()
         })
       });
 
@@ -591,7 +606,7 @@ function AttendanceSection({ assignments }) {
     <div className="attendance-section">
       <h2>Attendance Management</h2>
       
-      <div className="attendance-filters">
+      <div className="attendance-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px', marginBottom: '20px' }}>
         <select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)}>
           <option value="">Select Subject Assignment</option>
           {assignments.map(assignment => (
@@ -620,6 +635,13 @@ function AttendanceSection({ assignments }) {
           onChange={(e) => setSelectedDate(e.target.value)}
         />
         
+        <select value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}>
+          <option value="">Current Year (2024)</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+          <option value="2021">2021</option>
+        </select>
+        
         <button className="mark-all-btn" onClick={markAllPresent}>
           <Users size={16} /> Mark All Present
         </button>
@@ -627,7 +649,7 @@ function AttendanceSection({ assignments }) {
 
       {selectedAssignment && selectedPeriod && (
         <div className="attendance-table">
-          <h3>Mark Attendance - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} (Day {availablePeriods.find(p => p.id === selectedPeriod)?.dayOrder} P{availablePeriods.find(p => p.id === selectedPeriod)?.period} - {selectedDate})</h3>
+          <h3>Mark Attendance - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} (Day {availablePeriods.find(p => p.id === selectedPeriod)?.dayOrder} P{availablePeriods.find(p => p.id === selectedPeriod)?.period} - {selectedDate}) {academicYear && `(Academic Year: ${academicYear})`}</h3>
           <table>
             <thead>
               <tr>

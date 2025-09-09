@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar } from 'lucide-react';
+import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar, Filter, Hash, Building2 } from 'lucide-react';
 import './AdminDashboard.css';
+import './SubjectFilters.css';
 import ClassManagement from './ClassManagementNew';
 import AdminSettings from './AdminSettings';
 import TimetableManagement from './TimetableManagement';
@@ -12,8 +13,8 @@ function AdminDashboard({ user, logout }) {
   
   const setAutoHideMessage = (msg) => {
     setMessage(msg);
-    if (msg.includes('successfully')) {
-      setTimeout(() => setMessage(''), 3000);
+    if (msg.includes('successfully') || msg.includes('✅')) {
+      setTimeout(() => setMessage(''), 2000);
     }
   };
   
@@ -49,7 +50,7 @@ function AdminDashboard({ user, logout }) {
       
       <div className="content">
         {message && (
-          <div className={`message ${message.includes('successfully') ? 'success' : 'error'}`}>
+          <div className={`message ${message.includes('successfully') || message.includes('✅') ? 'success' : 'error'}`}>
             {message}
           </div>
         )}
@@ -59,7 +60,7 @@ function AdminDashboard({ user, logout }) {
         )}
         
         {currentView === 'create-student' && (
-          <CreateStudentForm setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
+          <CreateStudentForm setCurrentView={setCurrentView} setMessage={setMessage} setAutoHideMessage={setAutoHideMessage} />
         )}
         
         {currentView === 'create-staff' && (
@@ -176,8 +177,11 @@ function MainAdminView({ setCurrentView }) {
   );
 }
 
-function CreateStudentForm({ setCurrentView, setMessage }) {
+function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
   const [step, setStep] = useState(1);
+  const [showImport, setShowImport] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [batchData, setBatchData] = useState({
     department: '',
     year: ''
@@ -192,6 +196,41 @@ function CreateStudentForm({ setCurrentView, setMessage }) {
     generatedPassword: ''
   }]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  const handleCsvImport = async () => {
+    if (!csvFile) {
+      setMessage('Please select a CSV file');
+      return;
+    }
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append('csvFile', csvFile);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/students/import', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        setAutoHideMessage(`✅ ${result.message}`);
+        setCsvFile(null);
+        setShowImport(false);
+      } else {
+        setMessage(`❌ ${result.error}`);
+      }
+    } catch (error) {
+      setMessage('Network error during import');
+    } finally {
+      setIsImporting(false);
+    }
+  };
   
   const handleBatchSubmit = (e) => {
     e.preventDefault();
@@ -308,7 +347,47 @@ function CreateStudentForm({ setCurrentView, setMessage }) {
           <ArrowLeft size={16} />
         </button>
         <h2>Create Student Account</h2>
+        <button className="import-btn" onClick={() => setShowImport(!showImport)}>
+          <BookOpen size={16} /> Import CSV
+        </button>
       </div>
+      
+      {showImport && (
+        <div className="csv-import-section">
+          <div className="import-header">
+            <h3>Import Students from CSV</h3>
+            <button className="close-btn" onClick={() => setShowImport(false)}>×</button>
+          </div>
+          
+          <div className="import-actions">
+            <div className="file-upload">
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={(e) => setCsvFile(e.target.files[0])}
+                id="csvStudentFile"
+              />
+              <label htmlFor="csvStudentFile" className="file-label">
+                {csvFile ? csvFile.name : 'Choose CSV File'}
+              </label>
+            </div>
+            
+            <button 
+              className="upload-btn" 
+              onClick={handleCsvImport}
+              disabled={!csvFile || isImporting}
+            >
+              {isImporting ? 'Importing...' : <><RefreshCw size={16} /> Import</>}
+            </button>
+          </div>
+          
+          <div className="import-info">
+            <p><strong>CSV Format:</strong> name, email, department, year, dob</p>
+            <p><strong>Example:</strong> John Doe, john@email.com, CSE, 25, 150805</p>
+            <p><strong>Note:</strong> Register numbers and passwords will be auto-generated</p>
+          </div>
+        </div>
+      )}
       
       {step === 1 ? (
         <form onSubmit={handleBatchSubmit} className="admin-form">
@@ -451,6 +530,9 @@ function CreateStudentForm({ setCurrentView, setMessage }) {
 export default AdminDashboard;
 function CreateStaffForm({ setCurrentView, setMessage }) {
   const [step, setStep] = useState(1);
+  const [showImport, setShowImport] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [batchData, setBatchData] = useState({
     department: ''
   });
@@ -461,6 +543,41 @@ function CreateStaffForm({ setCurrentView, setMessage }) {
     generatedPassword: ''
   }]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  const handleCsvImport = async () => {
+    if (!csvFile) {
+      setMessage('Please select a CSV file');
+      return;
+    }
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append('csvFile', csvFile);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/staff/import', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        setMessage(`✅ ${result.message}`);
+        setCsvFile(null);
+        setShowImport(false);
+      } else {
+        setMessage(`❌ ${result.error}`);
+      }
+    } catch (error) {
+      setMessage('Network error during import');
+    } finally {
+      setIsImporting(false);
+    }
+  };
   
   const handleBatchSubmit = (e) => {
     e.preventDefault();
@@ -570,7 +687,48 @@ function CreateStaffForm({ setCurrentView, setMessage }) {
           <ArrowLeft size={16} />
         </button>
         <h2>Create Staff Account</h2>
+        <button className="import-btn" onClick={() => setShowImport(!showImport)}>
+          📁 Import CSV
+        </button>
       </div>
+      
+      {showImport && (
+        <div className="csv-import-section">
+          <div className="import-header">
+            <h3>Import Staff from CSV</h3>
+            <button className="close-btn" onClick={() => setShowImport(false)}>×</button>
+          </div>
+          
+          <div className="import-actions">
+            <div className="file-upload">
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={(e) => setCsvFile(e.target.files[0])}
+                id="csvStaffFile"
+              />
+              <label htmlFor="csvStaffFile" className="file-label">
+                {csvFile ? csvFile.name : 'Choose CSV File'}
+              </label>
+            </div>
+            
+            <button 
+              className="upload-btn" 
+              onClick={handleCsvImport}
+              disabled={!csvFile || isImporting}
+            >
+              {isImporting ? 'Importing...' : '📤 Import'}
+            </button>
+          </div>
+          
+          
+          <div className="import-info">
+            <p><strong>CSV Format:</strong> name, email, department</p>
+            <p><strong>Example:</strong> John Teacher, john@email.com, CSE</p>
+            <p><strong>Note:</strong> Staff IDs and passwords will be auto-generated</p>
+          </div>
+        </div>
+      )}
       
       {step === 1 ? (
         <form onSubmit={handleBatchSubmit} className="admin-form">
@@ -771,6 +929,26 @@ function ViewAccounts({ accounts, setCurrentView, setMessage, fetchAccounts }) {
       setIsResetting(false);
     }
   };
+
+  const handleDeleteAll = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/admin/delete-all-accounts', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setMessage(`✅ ${data.message}`);
+        fetchAccounts();
+      } else {
+        setMessage(`❌ ${data.error}`);
+      }
+    } catch (error) {
+      setMessage('Network error. Please try again.');
+    }
+  };
   
   return (
     <div className="accounts-container">
@@ -779,9 +957,18 @@ function ViewAccounts({ accounts, setCurrentView, setMessage, fetchAccounts }) {
           <ArrowLeft size={16} />
         </button>
         <h2>All Accounts</h2>
-        <button className="refresh-btn" onClick={fetchAccounts}>
-          <RefreshCw size={16} />
-        </button>
+        <div className="header-actions">
+          <button className="delete-all-btn" onClick={() => {
+            if (window.confirm('Are you sure you want to delete ALL accounts? This cannot be undone!')) {
+              handleDeleteAll();
+            }
+          }}>
+            <Trash2 size={16} /> Delete All
+          </button>
+          <button className="refresh-btn" onClick={fetchAccounts}>
+            <RefreshCw size={16} />
+          </button>
+        </div>
       </div>
       
       <div className="dept-filters">
@@ -906,26 +1093,42 @@ function SubjectManagement({ setCurrentView, setMessage }) {
   const [subjects, setSubjects] = useState([]);
   const [step, setStep] = useState(1);
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [batchData, setBatchData] = useState({
     department: '', year: '', semester: ''
   });
   const [subjectRows, setSubjectRows] = useState([
-    { code: '', name: '' }
+    { code: '', name: '', credits: '' }
   ]);
+  const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterYear, setFilterYear] = useState('');
+  const [filterSemester, setFilterSemester] = useState('');
+  const [csvFile, setCsvFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
-    const savedSubjects = JSON.parse(localStorage.getItem('subjects') || '[]');
-    if (savedSubjects.length === 0) {
-      const defaultSubjects = [
-        { id: 1, code: 'CS301', name: 'Data Structures', department: 'CSE', year: 'III', semester: 1 },
-        { id: 2, code: 'CS302', name: 'Database Systems', department: 'CSE', year: 'III', semester: 1 }
-      ];
-      setSubjects(defaultSubjects);
-      localStorage.setItem('subjects', JSON.stringify(defaultSubjects));
-    } else {
-      setSubjects(savedSubjects);
-    }
+    fetchSubjects();
   }, []);
+
+  useEffect(() => {
+    // Refresh subjects after CSV import
+    const interval = setInterval(fetchSubjects, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchSubjects = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/admin/subjects', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSubjects(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subjects');
+    }
+  };
 
   const handleStep1Submit = (e) => {
     e.preventDefault();
@@ -933,7 +1136,7 @@ function SubjectManagement({ setCurrentView, setMessage }) {
   };
 
   const addSubjectRow = () => {
-    setSubjectRows([...subjectRows, { code: '', name: '' }]);
+    setSubjectRows([...subjectRows, { code: '', name: '', credits: '' }]);
   };
 
   const removeSubjectRow = (index) => {
@@ -949,11 +1152,11 @@ function SubjectManagement({ setCurrentView, setMessage }) {
     setSubjectRows(updated);
   };
 
-  const handleFinalSubmit = (e) => {
+  const handleFinalSubmit = async (e) => {
     e.preventDefault();
-    const validRows = subjectRows.filter(row => row.code && row.name);
+    const validRows = subjectRows.filter(row => row.code && row.name && row.credits);
     if (validRows.length === 0) {
-      setMessage('Please add at least one subject');
+      setMessage('Please add at least one complete subject');
       return;
     }
 
@@ -961,21 +1164,81 @@ function SubjectManagement({ setCurrentView, setMessage }) {
       id: Date.now() + Math.random(),
       code: row.code,
       name: row.name,
+      credits: parseInt(row.credits),
       department: batchData.department,
       year: batchData.year,
       semester: batchData.semester
     }));
 
-    const updatedSubjects = [...subjects, ...newSubjects];
-    setSubjects(updatedSubjects);
-    localStorage.setItem('subjects', JSON.stringify(updatedSubjects));
+    // Save to database via API
+    try {
+      const promises = newSubjects.map(subject => 
+        fetch('http://localhost:5000/api/subjects', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            subject_code: subject.code,
+            subject_name: subject.name,
+            department: subject.department,
+            year: subject.year,
+            semester: subject.semester,
+            credits: subject.credits
+          })
+        })
+      );
+      
+      await Promise.all(promises);
+      fetchSubjects(); // Refresh list
+    } catch (error) {
+      setMessage('Error creating subjects');
+    }
     
     // Reset form
     setStep(1);
     setBatchData({ department: '', year: '', semester: '' });
-    setSubjectRows([{ code: '', name: '' }]);
+    setSubjectRows([{ code: '', name: '', credits: '' }]);
     setShowForm(false);
     setMessage(`${newSubjects.length} subjects created successfully!`);
+  };
+
+  const handleCsvImport = async () => {
+    if (!csvFile) {
+      setMessage('Please select a CSV file');
+      return;
+    }
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append('csvFile', csvFile);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/subjects/import', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        setMessage(`✅ ${result.message}`);
+        setCsvFile(null);
+        setShowImport(false);
+        fetchSubjects(); // Refresh subjects list
+        setTimeout(() => setMessage(''), 3000);
+      } else {
+        setMessage(result.error || 'Import failed');
+      }
+    } catch (error) {
+      setMessage('Network error during import');
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   return (
@@ -985,10 +1248,51 @@ function SubjectManagement({ setCurrentView, setMessage }) {
           <ArrowLeft size={16} />
         </button>
         <h2>Subject Management</h2>
-        <button className="add-btn" onClick={() => setShowForm(!showForm)}>
-          + Add Subject
-        </button>
+        <div className="header-actions">
+          <button className="import-btn" onClick={() => setShowImport(!showImport)}>
+            📁 Import CSV
+          </button>
+          <button className="add-btn" onClick={() => setShowForm(!showForm)}>
+            + Add Subject
+          </button>
+        </div>
       </div>
+      
+      {showImport && (
+        <div className="csv-import-section">
+          <div className="import-header">
+            <h3>Import Subjects from CSV</h3>
+            <button className="close-btn" onClick={() => setShowImport(false)}>×</button>
+          </div>
+          
+          <div className="import-actions">
+            <div className="file-upload">
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={(e) => setCsvFile(e.target.files[0])}
+                id="csvFile"
+              />
+              <label htmlFor="csvFile" className="file-label">
+                {csvFile ? csvFile.name : 'Choose CSV File'}
+              </label>
+            </div>
+            
+            <button 
+              className="upload-btn" 
+              onClick={handleCsvImport}
+              disabled={!csvFile || isImporting}
+            >
+              {isImporting ? 'Importing...' : '📤 Import'}
+            </button>
+          </div>
+          
+          <div className="import-info">
+            <p><strong>CSV Format:</strong> subject_code, subject_name, department, year, semester, credits</p>
+            <p><strong>Example:</strong> CS101, Programming, CSE, 1, 1, 4</p>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="form-overlay">
@@ -1093,7 +1397,6 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                           type="text"
                           value={row.code}
                           onChange={(e) => updateSubjectRow(index, 'code', e.target.value)}
-                          placeholder="CS301"
                           required
                         />
                         <label>Subject Code</label>
@@ -1104,10 +1407,21 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                           type="text"
                           value={row.name}
                           onChange={(e) => updateSubjectRow(index, 'name', e.target.value)}
-                          placeholder="Data Structures"
                           required
                         />
                         <label>Subject Name</label>
+                      </div>
+                      
+                      <div className="input-group-modern credits-input">
+                        <input
+                          type="number"
+                          value={row.credits}
+                          onChange={(e) => updateSubjectRow(index, 'credits', e.target.value)}
+                          min="1"
+                          max="6"
+                          required
+                        />
+                        <label>Credits</label>
                       </div>
                       
                       {subjectRows.length > 1 && (
@@ -1131,6 +1445,117 @@ function SubjectManagement({ setCurrentView, setMessage }) {
         </div>
       )}
 
+      <div className="subject-filters-enhanced">
+        <div className="filter-header">
+          <div className="filter-title">
+            <Filter size={20} />
+            <h3>Filter Subjects</h3>
+          </div>
+          <div className="filter-count">
+            <Hash size={16} />
+            {subjects.filter(subject => {
+              if (filterDepartment && subject.department !== filterDepartment) return false;
+              if (filterYear && subject.year != filterYear) return false;
+              if (filterSemester && subject.semester != filterSemester) return false;
+              return true;
+            }).length} subjects found
+          </div>
+        </div>
+        
+        <div className="filter-controls">
+          <div className="department-filter">
+            <label className="filter-label">
+              <Building2 size={16} />
+              Department
+            </label>
+            <div className="dept-buttons">
+              <button 
+                className={`dept-btn ${filterDepartment === '' ? 'active' : ''}`}
+                onClick={() => { setFilterDepartment(''); setFilterYear(''); setFilterSemester(''); }}
+              >
+                All Departments
+              </button>
+              {['IT', 'CSE', 'AIDS', 'MECH', 'EEE', 'ECE', 'CIVIL'].map(dept => (
+                <button
+                  key={dept}
+                  className={`dept-btn ${filterDepartment === dept ? 'active' : ''}`}
+                  onClick={() => { setFilterDepartment(dept); setFilterYear(''); setFilterSemester(''); }}
+                >
+                  {dept}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <div className="year-filter">
+            <label className="filter-label">
+              <Calendar size={16} />
+              Academic Year
+            </label>
+            <div className="year-buttons">
+              <button 
+                className={`year-btn ${filterYear === '' ? 'active' : ''}`}
+                onClick={() => { setFilterYear(''); setFilterSemester(''); }}
+                disabled={!filterDepartment}
+              >
+                All Years
+              </button>
+              {[{display: 'I', value: '1'}, {display: 'II', value: '2'}, {display: 'III', value: '3'}, {display: 'IV', value: '4'}].map(year => (
+                <button
+                  key={year.value}
+                  className={`year-btn ${filterYear === year.value ? 'active' : ''}`}
+                  onClick={() => { setFilterYear(year.value); setFilterSemester(''); }}
+                  disabled={!filterDepartment}
+                >
+                  {year.display} Year
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {filterYear && (
+            <div className="semester-filter">
+              <label className="filter-label">
+                <BookOpen size={16} />
+                Semester
+              </label>
+              <div className="semester-buttons">
+                <button 
+                  className={`sem-btn ${filterSemester === '' ? 'active' : ''}`}
+                  onClick={() => setFilterSemester('')}
+                >
+                  All Semesters
+                </button>
+                {filterYear === '1' && (
+                  <>
+                    <button className={`sem-btn ${filterSemester === '1' ? 'active' : ''}`} onClick={() => setFilterSemester('1')}>Sem 1</button>
+                    <button className={`sem-btn ${filterSemester === '2' ? 'active' : ''}`} onClick={() => setFilterSemester('2')}>Sem 2</button>
+                  </>
+                )}
+                {filterYear === '2' && (
+                  <>
+                    <button className={`sem-btn ${filterSemester === '3' ? 'active' : ''}`} onClick={() => setFilterSemester('3')}>Sem 3</button>
+                    <button className={`sem-btn ${filterSemester === '4' ? 'active' : ''}`} onClick={() => setFilterSemester('4')}>Sem 4</button>
+                  </>
+                )}
+                {filterYear === '3' && (
+                  <>
+                    <button className={`sem-btn ${filterSemester === '5' ? 'active' : ''}`} onClick={() => setFilterSemester('5')}>Sem 5</button>
+                    <button className={`sem-btn ${filterSemester === '6' ? 'active' : ''}`} onClick={() => setFilterSemester('6')}>Sem 6</button>
+                  </>
+                )}
+                {filterYear === '4' && (
+                  <>
+                    <button className={`sem-btn ${filterSemester === '7' ? 'active' : ''}`} onClick={() => setFilterSemester('7')}>Sem 7</button>
+                    <button className={`sem-btn ${filterSemester === '8' ? 'active' : ''}`} onClick={() => setFilterSemester('8')}>Sem 8</button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="subjects-table">
         <table>
           <thead>
@@ -1140,29 +1565,48 @@ function SubjectManagement({ setCurrentView, setMessage }) {
               <th>Dept</th>
               <th>Year</th>
               <th>Semester</th>
+              <th>Credits</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {subjects.map(subject => (
-              <tr key={subject.id}>
-                <td>{subject.code}</td>
-                <td>{subject.name}</td>
-                <td>{subject.department}</td>
-                <td>{subject.year}</td>
-                <td>{subject.semester}</td>
-                <td>
-                  <button className="delete-btn" onClick={() => {
-                    const updatedSubjects = subjects.filter(s => s.id !== subject.id);
-                    setSubjects(updatedSubjects);
-                    localStorage.setItem('subjects', JSON.stringify(updatedSubjects));
-                    setMessage('Subject deleted successfully!');
-                  }}>
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {subjects
+              .filter(subject => {
+                if (filterDepartment && subject.department !== filterDepartment) return false;
+                if (filterYear && subject.year != filterYear) return false;
+                if (filterSemester && subject.semester != filterSemester) return false;
+                return true;
+              })
+              .map(subject => (
+                <tr key={subject.id}>
+                  <td>{subject.subject_code}</td>
+                  <td>{subject.subject_name}</td>
+                  <td>{subject.department}</td>
+                  <td>{subject.year}</td>
+                  <td>{subject.semester}</td>
+                  <td>
+                    <span className="credits-badge">{subject.credits || 3}</span>
+                  </td>
+                  <td>
+                    <button className="delete-btn" onClick={async () => {
+                      try {
+                        const response = await fetch(`http://localhost:5000/api/subjects/${subject.id}`, {
+                          method: 'DELETE',
+                          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                        });
+                        if (response.ok) {
+                          fetchSubjects();
+                          setMessage('Subject deleted successfully!');
+                        }
+                      } catch (error) {
+                        setMessage('Failed to delete subject');
+                      }
+                    }}>
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
@@ -1209,11 +1653,24 @@ function StaffAssignments({ setCurrentView, setMessage }) {
     }
   };
 
+  const fetchSubjects = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/admin/subjects', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSubjects(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch subjects');
+    }
+  };
+
   useEffect(() => {
     fetchStaffMembers();
     fetchAssignments();
-    const savedSubjects = JSON.parse(localStorage.getItem('subjects') || '[]');
-    setSubjects(savedSubjects);
+    fetchSubjects();
   }, []);
 
   const handleBatchSubmit = (e) => {
@@ -1272,11 +1729,14 @@ function StaffAssignments({ setCurrentView, setMessage }) {
     }
   };
 
-  const filteredSubjects = subjects.filter(s => 
-    s.department === batchData.department && 
-    s.year === batchData.year && 
-    s.semester === batchData.semester
-  );
+  const yearMap = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+  const numericYear = yearMap[batchData.year] || batchData.year;
+  
+  const filteredSubjects = subjects.filter(s => {
+    return s.department === batchData.department && 
+           s.year == numericYear && 
+           s.semester == batchData.semester;
+  });
 
   return (
     <div className="staff-assignments">
@@ -1412,8 +1872,8 @@ function StaffAssignments({ setCurrentView, setMessage }) {
                         >
                           <option value="">Select Subject</option>
                           {filteredSubjects.map(subject => (
-                            <option key={subject.code} value={subject.code}>
-                              {subject.code} - {subject.name}
+                            <option key={subject.subject_code} value={subject.subject_code}>
+                              {subject.subject_code} - {subject.subject_name}
                             </option>
                           ))}
                         </select>
