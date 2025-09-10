@@ -11,7 +11,14 @@ const app = express();
 const PORT = 5000;
 const JWT_SECRET = 'secret-key';
 
-app.use(cors());
+// Configure CORS with specific options
+app.use(cors({
+  origin: 'http://localhost:3000', // React app's URL
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // Database setup
@@ -367,8 +374,8 @@ app.post('/api/admin/create-student', authenticateToken, requireAdmin, async (re
       classCreated = result.created;
     }
     
-    db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [register_no, name, email || null, hashedPassword, 'student', department, joiningYear, class_id, req.user.id], 
+    db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, current_semester, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [register_no, name, email || null, hashedPassword, 'student', department, joiningYear, class_id, 5, req.user.id], 
       async function(err) {
         if (err) {
           // Rollback class creation if student creation failed
@@ -544,22 +551,58 @@ app.post('/api/staff-assignments', authenticateToken, requireAdmin, async (req, 
     
     // Validate staff assignment
     await validateStaffAssignment(db, { staff_id: staffId, semester });
+
+    // Convert numeric year to Roman numeral
+    const yearToRoman = {
+      '1': 'I',
+      '2': 'II',
+      '3': 'III',
+      '4': 'IV'
+    };
+    
+    const romanYear = yearToRoman[year] || year;
     
     // Find the class_id based on department and year
     db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?', 
-      [department, year, 'A'], (err, classRow) => {
-        const class_id = classRow ? classRow.id : null;
+      [department, romanYear, 'A'], (err, classRow) => {
+        if (err) {
+          console.error('Error finding class:', err);
+          return res.status(500).json({ error: 'Database error' });
+        }
+
+        let class_id = classRow ? classRow.id : null;
         
-        db.run(
-          `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, class_id, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [staffId, staffName, subjectCode, subjectName, department, year, semester, class_id, credits || 3],
-          function(err) {
-            if (err) {
-              return res.status(500).json({ error: 'Database error' });
+        // If class doesn't exist, create it
+        if (!class_id) {
+          db.run('INSERT INTO classes (department, year, section) VALUES (?, ?, ?)',
+            [department, romanYear, 'A'],
+            function(err) {
+              if (err) {
+                console.error('Error creating class:', err);
+                return res.status(500).json({ error: 'Failed to create class' });
+              }
+              class_id = this.lastID;
+              
+              // Insert staff assignment after class is created
+              insertStaffAssignment();
+            });
+        } else {
+          // Insert staff assignment with existing class
+          insertStaffAssignment();
+        }
+
+        function insertStaffAssignment() {
+          db.run(
+            `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, class_id, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [staffId, staffName, subjectCode, subjectName, department, year, semester, class_id, credits || 3],
+            function(err) {
+              if (err) {
+                return res.status(500).json({ error: 'Database error' });
+              }
+              res.json({ id: this.lastID, message: 'Staff assignment created successfully' });
             }
-            res.json({ id: this.lastID, message: 'Staff assignment created successfully' });
-          }
-        );
+          );
+        }
       });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -583,6 +626,16 @@ app.delete('/api/staff-assignments/:id', authenticateToken, requireAdmin, (req, 
       return res.status(500).json({ error: 'Database error' });
     }
     res.json({ message: 'Staff assignment deleted successfully' });
+  });
+});
+
+// Delete all staff assignments
+app.delete('/api/staff-assignments', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM staff_assignments', function(err) {
+    if (err) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    res.json({ message: `${this.changes} staff assignments deleted successfully` });
   });
 });
 
@@ -698,12 +751,10 @@ app.get('/api/classes/:class_id/details', authenticateToken, (req, res) => {
       [classId, 'student'], (err, students) => {
         if (err) return res.status(500).json({ error: 'Database error' });
         
-        // Get staff assignments for this class based on department and year
-        db.all('SELECT * FROM staff_assignments WHERE department = ? AND year = ?',
-          [classInfo.department, classInfo.year], (err, assignments) => {
-            if (err) return res.status(500).json({ error: 'Database error' });
-            
-            // Get CC assignments for this class based on department and year
+        // Get staff assignments for this specific class 
+        db.all('SELECT sa.*, s.subject_name as full_subject_name FROM staff_assignments sa LEFT JOIN subjects s ON (sa.subject_code = s.subject_code AND sa.department = s.department AND sa.year = s.year) WHERE sa.class_id = ?',
+          [classId], (err, assignments) => {
+            if (err) return res.status(500).json({ error: 'Database error' });            // Get CC assignments for this class based on department and year
             db.all('SELECT * FROM cc_assignments WHERE department = ? AND year = ?',
               [classInfo.department, classInfo.year], (err, ccAssignments) => {
                 if (err) return res.status(500).json({ error: 'Database error' });
@@ -1561,53 +1612,107 @@ app.get('/api/student/subjects', authenticateToken, (req, res) => {
 });
 
 // CSV upload configuration
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 // Bulk import subjects from CSV
-app.post('/api/subjects/import', authenticateToken, requireAdmin, upload.single('csvFile'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No CSV file uploaded' });
-  }
-
-  const subjects = [];
+app.post('/api/subjects/import', authenticateToken, requireAdmin, (req, res, next) => {
+  console.log('Received import request');
+  upload.single('csvFile')(req, res, (err) => {
+    if (err) {
+      console.error('File upload error:', err);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ 
+          error: 'File is too large',
+          details: 'Maximum file size is 5MB'
+        });
+      }
+      return res.status(400).json({ 
+        error: 'File upload failed',
+        details: err.message
+      });
+    }
+    next();
+  });
+}, (req, res) => {
+  console.log('Processing uploaded file');
+    if (!req.file) {
+      console.error('No file received in request');
+      return res.status(400).json({ 
+        error: 'No CSV file uploaded',
+        details: 'Please select a valid CSV file'
+      });
+    }
+    
+    // Continue with CSV processing
+    console.log('File received:', req.file.originalname, 'Size:', req.file.size);
+    
+    // Rest of the existing import code...  const subjects = [];
+  const errors = [];
+  let rowNum = 0;
   
   fs.createReadStream(req.file.path)
     .pipe(csv())
     .on('data', (data) => {
+      rowNum++;
+      console.log('Processing row:', rowNum, 'Data:', data);
+      
+      // Validate required fields
+      if (!data.subject_code) errors.push(`Row ${rowNum}: Missing subject code`);
+      if (!data.subject_name) errors.push(`Row ${rowNum}: Missing subject name`);
+      if (!data.department) errors.push(`Row ${rowNum}: Missing department`);
+      if (!data.year) errors.push(`Row ${rowNum}: Missing year`);
+      if (!data.semester) errors.push(`Row ${rowNum}: Missing semester`);
+      
       if (data.subject_code && data.subject_name && data.department && data.year && data.semester) {
-        subjects.push([
+        const subject = [
           data.subject_code.trim(),
           data.subject_name.trim(), 
           data.department.trim(),
           data.year.trim(),
           data.semester.trim(),
           parseInt(data.credits) || 3
-        ]);
+        ];
+        subjects.push(subject);
+        console.log('Added subject:', subject);
       }
     })
     .on('end', () => {
       if (subjects.length === 0) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: 'No valid subjects found' });
+        return res.status(400).json({ 
+          error: 'No valid subjects found',
+          details: errors
+        });
       }
 
       let imported = 0;
+      let duplicates = 0;
       
       db.serialize(() => {
         db.run('BEGIN TRANSACTION');
         
         const stmt = db.prepare('INSERT INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES (?, ?, ?, ?, ?, ?)');
-        let duplicates = 0;
         
         subjects.forEach(subject => {
-          try {
-            stmt.run(subject);
-            imported++;
-          } catch (err) {
-            if (err.code === 'SQLITE_CONSTRAINT') {
-              duplicates++;
+          stmt.run(subject, function(err) {
+            if (err) {
+              if (err.message.includes('UNIQUE constraint failed')) {
+                duplicates++;
+                console.log('Duplicate subject:', subject[0]);
+              } else {
+                errors.push(`Error importing ${subject[0]}: ${err.message}`);
+                console.error('Import error for subject:', subject[0], err);
+              }
+            } else {
+              imported++;
+              console.log('Successfully imported subject:', subject[0]);
             }
-          }
+          });
         });
         
         stmt.finalize();
@@ -1616,24 +1721,39 @@ app.post('/api/subjects/import', authenticateToken, requireAdmin, upload.single(
           fs.unlinkSync(req.file.path);
           
           if (err) {
-            return res.status(500).json({ error: 'Import failed' });
+            console.error('Transaction error:', err);
+            return res.status(500).json({ 
+              error: 'Import failed',
+              details: errors
+            });
           }
           
           // Get actual count from database
           db.get('SELECT COUNT(*) as total FROM subjects', (err, result) => {
-            res.json({
+            const response = {
               message: `${imported} new subjects added, ${duplicates} duplicates skipped, ${result.total} total in database`,
               imported,
               duplicates,
               total: result.total
-            });
+            };
+            
+            if (errors.length > 0) {
+              response.errors = errors;
+            }
+            
+            console.log('Import completed:', response);
+            res.json(response);
           });
         });
       });
     })
-    .on('error', () => {
+    .on('error', (err) => {
+      console.error('CSV processing error:', err);
       fs.unlinkSync(req.file.path);
-      res.status(500).json({ error: 'CSV processing failed' });
+      res.status(500).json({ 
+        error: 'CSV processing failed',
+        details: err.message
+      });
     });
 });
 
@@ -1742,9 +1862,12 @@ app.post('/api/students/import', authenticateToken, requireAdmin, upload.single(
           // Auto-assign to class
           let classResult = null;
           if (autoCreateEnabled) {
+            // For semester 5, students should be in 3rd year (III)
+            const yearRoman = 'III';
+            
             classResult = await new Promise((resolve, reject) => {
               db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?',
-                [student.department, 'I', 'A'], (err, classRow) => {
+                [student.department, yearRoman, 'A'], (err, classRow) => {
                   if (err) reject(err);
                   else resolve(classRow ? classRow.id : null);
                 }
@@ -1755,7 +1878,7 @@ app.post('/api/students/import', authenticateToken, requireAdmin, upload.single(
             if (!classResult) {
               classResult = await new Promise((resolve, reject) => {
                 db.run('INSERT INTO classes (department, year, section) VALUES (?, ?, ?)',
-                  [student.department, 'I', 'A'], function(err) {
+                  [student.department, yearRoman, 'A'], function(err) {
                     if (err) reject(err);
                     else resolve(this.lastID);
                   }
@@ -1766,8 +1889,8 @@ app.post('/api/students/import', authenticateToken, requireAdmin, upload.single(
           
           await new Promise((resolve, reject) => {
             console.log('Creating user:', { register_no, name: student.name, password, hashedPassword: hashedPassword.substring(0, 10) + '...' });
-            db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-              [register_no, student.name, student.email, hashedPassword, 'student', student.department, joiningYear, classResult, req.user.id],
+            db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, current_semester, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [register_no, student.name, student.email, hashedPassword, 'student', student.department, joiningYear, classResult, 5, req.user.id],
               function(err) {
                 if (err) reject(err);
                 else { imported++; resolve(); }
@@ -1876,6 +1999,17 @@ app.get('/api/admin/subjects', authenticateToken, requireAdmin, (req, res) => {
   db.all('SELECT * FROM subjects ORDER BY department, year, semester, subject_code', (err, subjects) => {
     if (err) return res.status(500).json({ error: 'Failed to fetch subjects' });
     res.json(subjects);
+  });
+});
+
+// Move students to correct class based on semester
+app.put('/api/admin/fix-student-classes', authenticateToken, requireAdmin, (req, res) => {
+  // Move semester 5 students to III year class
+  db.run(`UPDATE users SET class_id = (
+    SELECT c.id FROM classes c WHERE c.department = users.department AND c.year = 'III' AND c.section = 'A'
+  ) WHERE role = 'student' AND current_semester = 5`, function(err) {
+    if (err) return res.status(500).json({ error: 'Failed to update student classes' });
+    res.json({ message: `${this.changes} students moved to correct classes` });
   });
 });
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Clock, Plus, Trash2, Calendar } from 'lucide-react';
+import './styles/TimetableManagement.css';
 
 function TimetableManagement({ setCurrentView, setMessage }) {
   const [timetables, setTimetables] = useState([]);

@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar, Filter, Hash, Building2 } from 'lucide-react';
-import './admin_features/styles/AdminDashboard.css';
-import './admin_features/styles/SubjectFilters.css';
-import ClassManagement from './admin_features/ClassManagementNew';
-import AdminSettings from './admin_features/AdminSettings';
-import TimetableManagement from './admin_features/TimetableManagement';
-import CCManagement from './admin_features/CCManagement';
-import ClassAssignment from './admin_features/ClassAssignment';
-import CreateStudentForm from './admin_features/StudentAccountForm';
-import CreateStaffForm from './admin_features/StaffAccountForm';
-import ViewAccounts from './admin_features/ViewAccounts';
-import SubjectManagement from './admin_features/SubjectManagement';
-import StaffAssignments from './admin_features/StaffAssignments';
+import './styles/AdminDashboard.css';
+import './styles/SubjectFilters.css';
+import ClassManagement from './ClassManagementNew';
+import AdminSettings from './AdminSettings';
+import TimetableManagement from './TimetableManagement';
+import CCManagement from './CCManagement';
+import ClassAssignment from './ClassAssignment';
+import CreateStudentForm from './StudentAccountForm';
+import CreateStaffForm from './StaffAccountForm';
+import ViewAccounts from './ViewAccounts';
+import SubjectManagement from './SubjectManagement';
+import StaffAssignments from './StaffAssignments';
 
 function AdminDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('main');

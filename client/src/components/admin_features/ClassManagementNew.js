@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Trash2 } from 'lucide-react';
+import './styles/ClassManagementNew.css';
 
 function ClassManagement({ setCurrentView, setMessage }) {
   const [classes, setClasses] = useState([]);

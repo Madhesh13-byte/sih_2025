@@ -1,0 +1,380 @@
+/* View Accounts Styles */
+:root {
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --secondary: #8b5cf6;
+  --accent: #06b6d4;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --gray-50: #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1e293b;
+  --gray-900: #0f172a;
+}
+
+.accounts-container {
+  background: white;
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.form-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.back-btn {
+  background: var(--gray-100);
+  border: none;
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.back-btn:hover {
+  background: var(--gray-200);
+}
+
+.refresh-btn {
+  background: var(--primary);
+  color: white;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.refresh-btn:hover {
+  background: var(--primary-dark);
+}
+
+.delete-all-btn {
+  background: linear-gradient(135deg, var(--error), #dc2626);
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.delete-all-btn:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}
+
+/* Department-based Filtering */
+.dept-filters {
+  margin-bottom: 2rem;
+}
+
+.dept-filters h3 {
+  color: var(--gray-800);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.dept-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dept-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  border: 2px solid transparent;
+  border-radius: 25px;
+  color: #000000;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+}
+
+.dept-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99,102,241,0.3);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.dept-btn.active {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-color: var(--primary);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(99,102,241,0.4);
+}
+
+.role-filters {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--gray-50);
+  border-radius: 12px;
+}
+
+.role-filters h4 {
+  color: var(--gray-800);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.role-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.role-btn {
+  padding: 14px 28px;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  border: 2px solid transparent;
+  border-radius: 30px;
+  color: var(--gray-800);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.role-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139,92,246,0.3);
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+.role-btn.active {
+  background: linear-gradient(135deg, var(--secondary), #7c3aed);
+  border-color: var(--secondary);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(139,92,246,0.4);
+}
+
+.year-filters {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.year-filters h5 {
+  color: var(--gray-700);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.year-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.year-btn {
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+  border: 2px solid transparent;
+  border-radius: 20px;
+  color: var(--gray-800);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.year-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(6,182,212,0.3);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.year-btn.active {
+  background: linear-gradient(135deg, var(--accent), #0891b2);
+  border-color: var(--accent);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(6,182,212,0.4);
+}
+
+.accounts-summary {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 6px;
+  border-left: 4px solid var(--success);
+}
+
+.accounts-summary p {
+  color: var(--success);
+  font-weight: 500;
+  margin: 0;
+}
+
+.accounts-table {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.accounts-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.accounts-table th,
+.accounts-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.accounts-table th {
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.accounts-table tr:hover {
+  background: var(--gray-50);
+}
+
+.reset-btn {
+  padding: 0.5rem 1rem;
+  background: var(--warning);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.reset-btn:hover {
+  background: #d97706;
+}
+
+.reset-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.reset-form input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  width: 120px;
+}
+
+.reset-form button {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.reset-form button:first-of-type {
+  background: var(--success);
+  color: white;
+}
+
+.reset-form button:last-of-type {
+  background: var(--gray-400);
+  color: white;
+}
+
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.delete-btn {
+  padding: 0.5rem;
+  background: var(--error);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-btn:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+  .accounts-container {
+    padding: 1rem;
+  }
+  
+  .dept-buttons, .role-toggle, .year-buttons {
+    justify-content: center;
+  }
+  
+  .dept-btn, .role-btn {
+    flex: 1;
+    min-width: 120px;
+  }
+  
+  .accounts-table {
+    font-size: 0.8rem;
+  }
+  
+  .accounts-table th,
+  .accounts-table td {
+    padding: 0.5rem;
+  }
+  
+  .action-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
