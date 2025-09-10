@@ -8,10 +8,11 @@ function TimetableManagement({ setCurrentView, setMessage }) {
   const [formStep, setFormStep] = useState(1);
   const [currentPeriod, setCurrentPeriod] = useState(1);
   const [dayPeriods, setDayPeriods] = useState([]);
-  const [selectedSemester, setSelectedSemester] = useState({ department: '', year: '', semester: '' });
+  const [selectedSemester, setSelectedSemester] = useState({ department: '', year: '', semester: '', section: '' });
   const [staffMembers, setStaffMembers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const sections = ['A', 'B', 'C', 'D'];
   const [formData, setFormData] = useState({
     day_of_week: '',
     period_number: '',
@@ -40,6 +41,13 @@ function TimetableManagement({ setCurrentView, setMessage }) {
     fetchAssignments();
   }, []);
 
+  // Refetch assignments when semester details change
+  useEffect(() => {
+    if (selectedSemester.department && selectedSemester.year && selectedSemester.semester) {
+      fetchAssignments();
+    }
+  }, [selectedSemester.department, selectedSemester.year, selectedSemester.semester]);
+
   useEffect(() => {
     if (selectedSemester.department && selectedSemester.year && selectedSemester.semester) {
       fetchTimetables();
@@ -67,7 +75,14 @@ function TimetableManagement({ setCurrentView, setMessage }) {
 
   const fetchAssignments = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/staff-assignments', {
+      const { department, year, semester } = selectedSemester;
+      const queryParams = new URLSearchParams({
+        department,
+        year,
+        semester
+      }).toString();
+
+      const response = await fetch(`http://localhost:5000/api/staff-assignments?${queryParams}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {
@@ -81,8 +96,8 @@ function TimetableManagement({ setCurrentView, setMessage }) {
 
   const fetchTimetables = async () => {
     try {
-      const { department, year, semester } = selectedSemester;
-      const response = await fetch(`http://localhost:5000/api/timetables?department=${department}&year=${year}&semester=${semester}`, {
+      const { department, year, semester, section } = selectedSemester;
+      const response = await fetch(`http://localhost:5000/api/timetables?department=${department}&year=${year}&semester=${semester}&section=${section}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {
@@ -193,6 +208,32 @@ function TimetableManagement({ setCurrentView, setMessage }) {
       }
     } catch (error) {
       setMessage('Error deleting timetable entry');
+    }
+  };
+
+  const handleDeleteAllTimetable = async () => {
+    if (!window.confirm(`Are you sure you want to delete the entire timetable for ${selectedSemester.department} ${selectedSemester.year} - Semester ${selectedSemester.semester}?`)) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/timetables/class`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          department: selectedSemester.department,
+          year: selectedSemester.year,
+          semester: selectedSemester.semester
+        })
+      });
+
+      if (response.ok) {
+        setTimetables([]);
+        setMessage('Timetable deleted successfully!');
+      }
+    } catch (error) {
+      setMessage('Error deleting timetable');
     }
   };
 
@@ -312,11 +353,23 @@ function TimetableManagement({ setCurrentView, setMessage }) {
               </>
             )}
           </select>
+
+          <select
+            value={selectedSemester.section}
+            onChange={(e) => setSelectedSemester({...selectedSemester, section: e.target.value})}
+            disabled={!selectedSemester.semester}
+            style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+          >
+            <option value="">Select Section</option>
+            {sections.map(section => (
+              <option key={section} value={section}>Section {section}</option>
+            ))}
+          </select>
         </div>
       </div>
 
       {/* Timetable Grid */}
-      {selectedSemester.department && selectedSemester.year && selectedSemester.semester && (
+      {selectedSemester.department && selectedSemester.year && selectedSemester.semester && selectedSemester.section && (
         <div style={{
           backgroundColor: 'white',
           borderRadius: '12px',
@@ -325,24 +378,42 @@ function TimetableManagement({ setCurrentView, setMessage }) {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h3 style={{ margin: 0, color: '#2c3e50' }}>
-              {selectedSemester.department} {selectedSemester.year} - Semester {selectedSemester.semester}
+              {selectedSemester.department} {selectedSemester.year} - Semester {selectedSemester.semester} Section {selectedSemester.section}
             </h3>
-            <button
-              onClick={() => setShowForm(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                backgroundColor: '#3498db',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }}
-            >
-              <Plus size={16} /> Add Period
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={handleDeleteAllTimetable}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Trash2 size={16} /> Delete Timetable
+              </button>
+              <button
+                onClick={() => setShowForm(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#3498db',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={16} /> Add Period
+              </button>
+            </div>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -479,12 +550,7 @@ function TimetableManagement({ setCurrentView, setMessage }) {
                   value={formData.subject_code}
                   onChange={(e) => {
                     const selectedSubject = e.target.value;
-                    const assignment = assignments.find(a => 
-                      a.subject_code === selectedSubject && 
-                      a.department === selectedSemester.department && 
-                      a.year === selectedSemester.year && 
-                      a.semester === selectedSemester.semester
-                    );
+                    const assignment = assignments.find(a => a.subject_code === selectedSubject);
                     
                     setFormData({
                       ...formData, 
@@ -497,19 +563,32 @@ function TimetableManagement({ setCurrentView, setMessage }) {
                 >
                   <option value="">Select Subject</option>
                   {filteredSubjects.map(subject => {
-                    const assignment = assignments.find(a => 
-                      a.subject_code === subject.code && 
-                      a.department === selectedSemester.department && 
-                      a.year === selectedSemester.year && 
-                      a.semester === selectedSemester.semester
-                    );
+                    const assignment = assignments.find(a => a.subject_code === subject.code);
+                    const subjectDisplay = `${subject.code} - ${subject.name}`;
+                    const staffDisplay = assignment ? ` (${assignment.staff_name})` : ' (No staff assigned)';
+                    
                     return (
-                      <option key={subject.code} value={subject.code}>
-                        {subject.code} - {subject.name} {assignment ? `(${assignment.staff_name})` : '(No staff assigned)'}
+                      <option 
+                        key={subject.code} 
+                        value={subject.code}
+                        disabled={!assignment}
+                      >
+                        {subjectDisplay}{staffDisplay}
                       </option>
                     );
                   })}
                 </select>
+
+                <div style={{ 
+                  fontSize: '12px', 
+                  color: '#666', 
+                  marginTop: '5px', 
+                  padding: '8px', 
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '4px'
+                }}>
+                  Note: Only subjects with assigned staff members are available for selection
+                </div>
 
                 {formData.subject_code && (
                   <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e1e8ed' }}>

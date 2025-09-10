@@ -818,12 +818,12 @@ app.put('/api/admin/notifications/:id/read', authenticateToken, requireAdmin, (r
 
 // Timetable endpoints
 app.post('/api/timetables', authenticateToken, requireAdmin, (req, res) => {
-  const { department, year, semester, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number } = req.body;
+  const { department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number } = req.body;
   
   db.run(
-    `INSERT INTO timetables (department, year, semester, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [department, year, semester, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number],
+    `INSERT INTO timetables (department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number],
     function(err) {
       if (err) {
         if (err.message.includes('UNIQUE constraint failed')) {
@@ -831,23 +831,27 @@ app.post('/api/timetables', authenticateToken, requireAdmin, (req, res) => {
         }
         return res.status(500).json({ error: 'Database error' });
       }
+      db.run('PRAGMA wal_checkpoint(FULL)', (err) => {
+        if (err) console.error('Checkpoint error:', err);
+      });
       res.json({ id: this.lastID, message: 'Timetable entry created successfully' });
     }
   );
 });
 
 app.get('/api/timetables', authenticateToken, (req, res) => {
-  const { department, year, semester } = req.query;
+  const { department, year, semester, section } = req.query;
   
   let query = 'SELECT * FROM timetables';
   let params = [];
   
-  if (department || year || semester) {
+  if (department || year || semester || section) {
     query += ' WHERE ';
     const conditions = [];
     if (department) { conditions.push('department = ?'); params.push(department); }
     if (year) { conditions.push('year = ?'); params.push(year); }
     if (semester) { conditions.push('semester = ?'); params.push(semester); }
+    if (section) { conditions.push('section = ?'); params.push(section); }
     query += conditions.join(' AND ');
   }
   
@@ -865,6 +869,49 @@ app.delete('/api/timetables/:id', authenticateToken, requireAdmin, (req, res) =>
   db.run('DELETE FROM timetables WHERE id = ?', [id], function(err) {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json({ message: 'Timetable entry deleted successfully' });
+  });
+});
+
+// Delete all timetable entries for a specific class
+app.delete('/api/timetables/class', authenticateToken, requireAdmin, (req, res) => {
+  const { department, year, semester, section } = req.body;
+  
+  if (!department || !year || !semester) {
+    return res.status(400).json({ error: 'Department, year, and semester are required' });
+  }
+  
+  db.serialize(() => {
+    // Begin transaction
+    db.run('BEGIN TRANSACTION');
+    
+    db.run(
+      'DELETE FROM timetables WHERE department = ? AND year = ? AND semester = ?',
+      [department, year, semester],
+      function(err) {
+        if (err) {
+          db.run('ROLLBACK');
+          return res.status(500).json({ error: 'Database error' });
+        }
+        
+        // Commit the transaction and force a checkpoint
+        db.run('COMMIT', (err) => {
+          if (err) {
+            db.run('ROLLBACK');
+            return res.status(500).json({ error: 'Failed to commit changes' });
+          }
+          
+          // Force a checkpoint to ensure changes are written to disk
+          db.run('PRAGMA wal_checkpoint(FULL)', (err) => {
+            if (err) console.error('Checkpoint error:', err);
+            
+            res.json({ 
+              message: `All timetable entries deleted successfully for ${department} ${year} Semester ${semester}`,
+              deletedCount: this.changes
+            });
+          });
+        });
+      }
+    );
   });
 });
 
