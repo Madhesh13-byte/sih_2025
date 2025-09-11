@@ -606,7 +606,7 @@ function AttendanceSection({ assignments }) {
     <div className="attendance-section">
       <h2>Attendance Management</h2>
       
-      <div className="attendance-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px', marginBottom: '20px' }}>
+      <div className="attendance-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
         <select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)}>
           <option value="">Select Subject Assignment</option>
           {assignments.map(assignment => (
@@ -635,13 +635,6 @@ function AttendanceSection({ assignments }) {
           onChange={(e) => setSelectedDate(e.target.value)}
         />
         
-        <select value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}>
-          <option value="">Current Year (2024)</option>
-          <option value="2023">2023</option>
-          <option value="2022">2022</option>
-          <option value="2021">2021</option>
-        </select>
-        
         <button className="mark-all-btn" onClick={markAllPresent}>
           <Users size={16} /> Mark All Present
         </button>
@@ -649,7 +642,7 @@ function AttendanceSection({ assignments }) {
 
       {selectedAssignment && selectedPeriod && (
         <div className="attendance-table">
-          <h3>Mark Attendance - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} (Day {availablePeriods.find(p => p.id === selectedPeriod)?.dayOrder} P{availablePeriods.find(p => p.id === selectedPeriod)?.period} - {selectedDate}) {academicYear && `(Academic Year: ${academicYear})`}</h3>
+          <h3>Mark Attendance - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} (Day {availablePeriods.find(p => p.id === selectedPeriod)?.dayOrder} P{availablePeriods.find(p => p.id === selectedPeriod)?.period} - {selectedDate})</h3>
           <table>
             <thead>
               <tr>

@@ -379,7 +379,6 @@ function StaffAssignments({ setCurrentView, setMessage }) {
               <th>Year</th>
               <th>Semester</th>
               <th>Section</th>
-              <th>Class</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -393,9 +392,6 @@ function StaffAssignments({ setCurrentView, setMessage }) {
                 <td>{assignment.year}</td>
                 <td>{assignment.semester}</td>
                 <td>{assignment.section}</td>
-                <td>{assignment.class_id ? 
-                  classes.find(c => c.id === assignment.class_id)?.year + ' ' + 
-                  classes.find(c => c.id === assignment.class_id)?.section : 'Not Assigned'}</td>
                 <td>
                   <button className="delete-btn" onClick={async () => {
                     try {

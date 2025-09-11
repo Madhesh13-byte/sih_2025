@@ -69,8 +69,17 @@ function TimetableManagement({ setCurrentView, setMessage }) {
   };
 
   const fetchSubjects = async () => {
-    const savedSubjects = JSON.parse(localStorage.getItem('subjects') || '[]');
-    setSubjects(savedSubjects);
+    try {
+      const response = await fetch('http://localhost:5000/api/subjects', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSubjects(data.map(s => ({ code: s.subject_code, name: s.subject_name, department: s.department, year: s.year, semester: s.semester })));
+      }
+    } catch (error) {
+      console.error('Failed to fetch subjects:', error);
+    }
   };
 
   const fetchAssignments = async () => {
@@ -97,8 +106,12 @@ function TimetableManagement({ setCurrentView, setMessage }) {
   const fetchTimetables = async () => {
     try {
       const { department, year, semester, section } = selectedSemester;
-      const response = await fetch(`http://localhost:5000/api/timetables?department=${department}&year=${year}&semester=${semester}&section=${section}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      const yearToNumeric = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+      const numericYear = yearToNumeric[year] || year;
+      const response = await fetch(`http://localhost:5000/api/timetables?department=${department}&year=${numericYear}&semester=${semester}&section=${section}&_t=${Date.now()}`, {
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
       if (response.ok) {
         const data = await response.json();
@@ -112,26 +125,32 @@ function TimetableManagement({ setCurrentView, setMessage }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const selectedSubject = subjects.find(s => s.code === formData.subject_code);
-    const selectedAssignment = assignments.find(a => 
-      a.subject_code === formData.subject_code && 
-      a.department === selectedSemester.department && 
-      a.year === selectedSemester.year && 
-      a.semester === selectedSemester.semester
-    );
+    const selectedAssignment = assignments.find(a => a.subject_code === formData.subject_code);
     
-    if (!selectedSubject || !selectedAssignment) {
-      setMessage('Please select a subject with assigned staff');
+    if (!selectedAssignment) {
+      setMessage('Please select a subject');
       return;
     }
 
+    // Convert Roman year to numeric
+    const yearToNumeric = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+    const numericYear = yearToNumeric[selectedSemester.year] || selectedSemester.year;
+    
     // Add current period to the list
     const newPeriod = {
-      ...selectedSemester,
-      ...formData,
-      subject_name: selectedSubject.name,
+      department: selectedSemester.department,
+      year: numericYear,
+      semester: selectedSemester.semester,
+      section: selectedSemester.section,
+      day_of_week: formData.day_of_week,
+      period_number: currentPeriod,
+      start_time: periods[currentPeriod-1]?.start || '',
+      end_time: periods[currentPeriod-1]?.end || '',
+      subject_code: formData.subject_code,
+      subject_name: selectedAssignment.subject_name,
       staff_id: selectedAssignment.staff_id,
-      staff_name: selectedAssignment.staff_name
+      staff_name: selectedAssignment.staff_name,
+      room_number: formData.room_number
     };
     
     setDayPeriods([...dayPeriods, newPeriod]);
@@ -148,7 +167,6 @@ function TimetableManagement({ setCurrentView, setMessage }) {
         staff_id: '',
         room_number: ''
       });
-      setFormStep(2); // Stay on step 2 for next period
     } else {
       // Save all periods to database
       await saveAllPeriods([...dayPeriods, newPeriod]);
@@ -157,22 +175,27 @@ function TimetableManagement({ setCurrentView, setMessage }) {
   
   const saveAllPeriods = async (periods) => {
     try {
-      const promises = periods.map(period => 
-        fetch('http://localhost:5000/api/timetables', {
+      const promises = periods.map(period => {
+        console.log('Saving period:', period);
+        return fetch('http://localhost:5000/api/timetables', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           },
           body: JSON.stringify(period)
-        })
-      );
+        });
+      });
       
-      await Promise.all(promises);
+      const responses = await Promise.all(promises);
+      const results = await Promise.all(responses.map(r => r.json()));
+      console.log('Save results:', results);
+      
       fetchTimetables();
       resetForm();
       setMessage(`${periods.length} periods added successfully!`);
     } catch (error) {
+      console.error('Error saving periods:', error);
       setMessage('Error saving periods');
     }
   };
@@ -212,9 +235,14 @@ function TimetableManagement({ setCurrentView, setMessage }) {
   };
 
   const handleDeleteAllTimetable = async () => {
-    if (!window.confirm(`Are you sure you want to delete the entire timetable for ${selectedSemester.department} ${selectedSemester.year} - Semester ${selectedSemester.semester}?`)) return;
+    if (!window.confirm(`Are you sure you want to delete the entire timetable for ${selectedSemester.department} ${selectedSemester.year} - Semester ${selectedSemester.semester} Section ${selectedSemester.section}?`)) return;
 
     try {
+      const yearToNumeric = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+      const numericYear = yearToNumeric[selectedSemester.year] || selectedSemester.year;
+      
+      console.log('Deleting timetable for:', { department: selectedSemester.department, year: numericYear, semester: selectedSemester.semester, section: selectedSemester.section });
+      
       const response = await fetch(`http://localhost:5000/api/timetables/class`, {
         method: 'DELETE',
         headers: {
@@ -223,16 +251,23 @@ function TimetableManagement({ setCurrentView, setMessage }) {
         },
         body: JSON.stringify({
           department: selectedSemester.department,
-          year: selectedSemester.year,
-          semester: selectedSemester.semester
+          year: numericYear,
+          semester: selectedSemester.semester,
+          section: selectedSemester.section
         })
       });
 
+      const result = await response.json();
+      console.log('Delete response:', result);
+
       if (response.ok) {
-        setTimetables([]);
-        setMessage('Timetable deleted successfully!');
+        fetchTimetables(); // Refetch from database instead of just clearing state
+        setMessage(result.message || 'Timetable deleted successfully!');
+      } else {
+        setMessage(result.error || 'Failed to delete timetable');
       }
     } catch (error) {
+      console.error('Delete error:', error);
       setMessage('Error deleting timetable');
     }
   };
@@ -503,7 +538,16 @@ function TimetableManagement({ setCurrentView, setMessage }) {
           justifyContent: 'center',
           zIndex: 1000
         }}>
-          <form onSubmit={formStep === 2 ? handleSubmit : (e) => { e.preventDefault(); setFormStep(2); }} style={{
+          <form onSubmit={formStep === 2 ? handleSubmit : (e) => { 
+            e.preventDefault(); 
+            setFormStep(2);
+            setFormData({
+              ...formData,
+              period_number: '1',
+              start_time: periods[0]?.start || '',
+              end_time: periods[0]?.end || ''
+            });
+          }} style={{
             backgroundColor: 'white',
             borderRadius: '12px',
             padding: '30px',
@@ -562,42 +606,21 @@ function TimetableManagement({ setCurrentView, setMessage }) {
                   style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
                 >
                   <option value="">Select Subject</option>
-                  {filteredSubjects.map(subject => {
-                    const assignment = assignments.find(a => a.subject_code === subject.code);
-                    const subjectDisplay = `${subject.code} - ${subject.name}`;
-                    const staffDisplay = assignment ? ` (${assignment.staff_name})` : ' (No staff assigned)';
-                    
-                    return (
-                      <option 
-                        key={subject.code} 
-                        value={subject.code}
-                        disabled={!assignment}
-                      >
-                        {subjectDisplay}{staffDisplay}
-                      </option>
-                    );
-                  })}
+                  {assignments.map(assignment => (
+                    <option 
+                      key={assignment.id} 
+                      value={assignment.subject_code}
+                    >
+                      {assignment.subject_code} - {assignment.subject_name} ({assignment.staff_name})
+                    </option>
+                  ))}
                 </select>
 
-                <div style={{ 
-                  fontSize: '12px', 
-                  color: '#666', 
-                  marginTop: '5px', 
-                  padding: '8px', 
-                  backgroundColor: '#f8f9fa',
-                  borderRadius: '4px'
-                }}>
-                  Note: Only subjects with assigned staff members are available for selection
-                </div>
+
 
                 {formData.subject_code && (
                   <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e1e8ed' }}>
-                    <strong>Assigned Staff:</strong> {assignments.find(a => 
-                      a.subject_code === formData.subject_code && 
-                      a.department === selectedSemester.department && 
-                      a.year === selectedSemester.year && 
-                      a.semester === selectedSemester.semester
-                    )?.staff_name || 'No staff assigned'}
+                    <strong>Assigned Staff:</strong> {assignments.find(a => a.subject_code === formData.subject_code)?.staff_name}
                   </div>
                 )}
 

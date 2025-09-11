@@ -394,10 +394,10 @@ function ClassManagement({ setCurrentView, setMessage }) {
                     style={{width: '100%', padding: '12px', border: '2px solid #e1e8ed', borderRadius: '8px', fontSize: '14px', backgroundColor: 'white'}}
                   >
                     <option value="">Select Year</option>
-                    <option value="I">I Year</option>
-                    <option value="II">II Year</option>
-                    <option value="III">III Year</option>
-                    <option value="IV">IV Year</option>
+                    <option value="1">1st Year</option>
+                    <option value="2">2nd Year</option>
+                    <option value="3">3rd Year</option>
+                    <option value="4">4th Year</option>
                   </select>
                 </div>
                 

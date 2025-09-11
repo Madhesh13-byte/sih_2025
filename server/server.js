@@ -50,7 +50,7 @@ db.serialize(() => {
     department TEXT NOT NULL,
     year TEXT NOT NULL,
     semester TEXT NOT NULL,
-    class_id INTEGER,
+    section TEXT DEFAULT 'A',
     credits INTEGER DEFAULT 3,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
@@ -113,6 +113,7 @@ db.serialize(() => {
     department TEXT NOT NULL,
     year TEXT NOT NULL,
     semester TEXT NOT NULL,
+    section TEXT NOT NULL,
     day_of_week INTEGER NOT NULL,
     period_number INTEGER NOT NULL,
     start_time TEXT NOT NULL,
@@ -123,7 +124,7 @@ db.serialize(() => {
     staff_name TEXT NOT NULL,
     room_number TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(department, year, semester, day_of_week, period_number)
+    UNIQUE(department, year, semester, section, day_of_week, period_number)
   )`);
 
   // Attendance table
@@ -184,9 +185,9 @@ db.serialize(() => {
     }
   });
   
-  db.run(`ALTER TABLE staff_assignments ADD COLUMN class_id INTEGER`, (err) => {
+  db.run(`ALTER TABLE staff_assignments ADD COLUMN section TEXT DEFAULT 'A'`, (err) => {
     if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding class_id column to staff_assignments:', err);
+      console.error('Error adding section column to staff_assignments:', err);
     }
   });
   
@@ -544,7 +545,7 @@ app.put('/api/admin/reset-password/:id', authenticateToken, requireAdmin, async 
 
 // Staff assignments endpoints
 app.post('/api/staff-assignments', authenticateToken, requireAdmin, async (req, res) => {
-  const { staffId, staffName, subjectCode, subjectName, department, year, semester, credits } = req.body;
+  const { staffId, staffName, subjectCode, subjectName, department, year, semester, section, credits } = req.body;
   
   try {
     const { validateStaffAssignment } = require('./utils/businessLogic');
@@ -561,49 +562,19 @@ app.post('/api/staff-assignments', authenticateToken, requireAdmin, async (req, 
     };
     
     const romanYear = yearToRoman[year] || year;
+    const assignmentSection = section || 'A';
     
-    // Find the class_id based on department and year
-    db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?', 
-      [department, romanYear, 'A'], (err, classRow) => {
+    // Insert staff assignment directly with section
+    db.run(
+      `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, section, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [staffId, staffName, subjectCode, subjectName, department, year, semester, assignmentSection, credits || 3],
+      function(err) {
         if (err) {
-          console.error('Error finding class:', err);
           return res.status(500).json({ error: 'Database error' });
         }
-
-        let class_id = classRow ? classRow.id : null;
-        
-        // If class doesn't exist, create it
-        if (!class_id) {
-          db.run('INSERT INTO classes (department, year, section) VALUES (?, ?, ?)',
-            [department, romanYear, 'A'],
-            function(err) {
-              if (err) {
-                console.error('Error creating class:', err);
-                return res.status(500).json({ error: 'Failed to create class' });
-              }
-              class_id = this.lastID;
-              
-              // Insert staff assignment after class is created
-              insertStaffAssignment();
-            });
-        } else {
-          // Insert staff assignment with existing class
-          insertStaffAssignment();
-        }
-
-        function insertStaffAssignment() {
-          db.run(
-            `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, class_id, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [staffId, staffName, subjectCode, subjectName, department, year, semester, class_id, credits || 3],
-            function(err) {
-              if (err) {
-                return res.status(500).json({ error: 'Database error' });
-              }
-              res.json({ id: this.lastID, message: 'Staff assignment created successfully' });
-            }
-          );
-        }
-      });
+        res.json({ id: this.lastID, message: 'Staff assignment created successfully' });
+      }
+    );
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -751,9 +722,9 @@ app.get('/api/classes/:class_id/details', authenticateToken, (req, res) => {
       [classId, 'student'], (err, students) => {
         if (err) return res.status(500).json({ error: 'Database error' });
         
-        // Get staff assignments for this specific class 
-        db.all('SELECT sa.*, s.subject_name as full_subject_name FROM staff_assignments sa LEFT JOIN subjects s ON (sa.subject_code = s.subject_code AND sa.department = s.department AND sa.year = s.year) WHERE sa.class_id = ?',
-          [classId], (err, assignments) => {
+        // Get staff assignments for this class based on department, year, and section
+        db.all('SELECT sa.*, s.subject_name as full_subject_name FROM staff_assignments sa LEFT JOIN subjects s ON (sa.subject_code = s.subject_code AND sa.department = s.department AND sa.year = s.year) WHERE sa.department = ? AND sa.year = ? AND sa.section = ?',
+          [classInfo.department, classInfo.year, classInfo.section], (err, assignments) => {
             if (err) return res.status(500).json({ error: 'Database error' });            // Get CC assignments for this class based on department and year
             db.all('SELECT * FROM cc_assignments WHERE department = ? AND year = ?',
               [classInfo.department, classInfo.year], (err, ccAssignments) => {
@@ -831,9 +802,7 @@ app.post('/api/timetables', authenticateToken, requireAdmin, (req, res) => {
         }
         return res.status(500).json({ error: 'Database error' });
       }
-      db.run('PRAGMA wal_checkpoint(FULL)', (err) => {
-        if (err) console.error('Checkpoint error:', err);
-      });
+
       res.json({ id: this.lastID, message: 'Timetable entry created successfully' });
     }
   );
@@ -876,43 +845,31 @@ app.delete('/api/timetables/:id', authenticateToken, requireAdmin, (req, res) =>
 app.delete('/api/timetables/class', authenticateToken, requireAdmin, (req, res) => {
   const { department, year, semester, section } = req.body;
   
-  if (!department || !year || !semester) {
-    return res.status(400).json({ error: 'Department, year, and semester are required' });
+  console.log('Delete request received:', { department, year, semester, section });
+  
+  if (!department || !year || !semester || !section) {
+    console.log('Missing required fields');
+    return res.status(400).json({ error: 'Department, year, semester, and section are required' });
   }
   
-  db.serialize(() => {
-    // Begin transaction
-    db.run('BEGIN TRANSACTION');
-    
-    db.run(
-      'DELETE FROM timetables WHERE department = ? AND year = ? AND semester = ?',
-      [department, year, semester],
-      function(err) {
-        if (err) {
-          db.run('ROLLBACK');
-          return res.status(500).json({ error: 'Database error' });
-        }
-        
-        // Commit the transaction and force a checkpoint
-        db.run('COMMIT', (err) => {
-          if (err) {
-            db.run('ROLLBACK');
-            return res.status(500).json({ error: 'Failed to commit changes' });
-          }
-          
-          // Force a checkpoint to ensure changes are written to disk
-          db.run('PRAGMA wal_checkpoint(FULL)', (err) => {
-            if (err) console.error('Checkpoint error:', err);
-            
-            res.json({ 
-              message: `All timetable entries deleted successfully for ${department} ${year} Semester ${semester}`,
-              deletedCount: this.changes
-            });
-          });
-        });
+  db.run(
+    'DELETE FROM timetables WHERE department = ? AND year = ? AND semester = ? AND section = ?',
+    [department, year, semester, section],
+    function(err) {
+      if (err) {
+        console.error('Delete error:', err);
+        return res.status(500).json({ error: 'Database error' });
       }
-    );
-  });
+      
+      const deletedCount = this.changes;
+      console.log('Deleted', deletedCount, 'timetable entries');
+      
+      res.json({ 
+        message: `${deletedCount} timetable entries deleted successfully for ${department} ${year} Semester ${semester} Section ${section}`,
+        deletedCount: deletedCount
+      });
+    }
+  );
 });
 
 // Get current period for staff based on timetable (non-realtime)

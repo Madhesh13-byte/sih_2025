@@ -173,27 +173,7 @@ function AcademicSection({ user }) {
     <div className="academic-section">
       <h2>Academic Performance</h2>
       
-      <div className="semester-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
-        <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)}>
-          <option value="">Current Semester</option>
-          <option value="1">Semester 1</option>
-          <option value="2">Semester 2</option>
-          <option value="3">Semester 3</option>
-          <option value="4">Semester 4</option>
-          <option value="5">Semester 5</option>
-          <option value="6">Semester 6</option>
-          <option value="7">Semester 7</option>
-          <option value="8">Semester 8</option>
-        </select>
-        
-        <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
-          <option value="">Current Year</option>
-          <option value="2024">2024</option>
-          <option value="2023">2023</option>
-          <option value="2022">2022</option>
-          <option value="2021">2021</option>
-        </select>
-      </div>
+
       
       <div className="grade-tabs" style={{ marginBottom: '20px' }}>
         <button 
