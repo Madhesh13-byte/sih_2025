@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, 
   Calendar, 
@@ -226,6 +226,7 @@ function GradesSection({ assignments }) {
   const [gradeCategory, setGradeCategory] = useState('');
   const [academicYear, setAcademicYear] = useState('');
   const [students, setStudents] = useState([]);
+  const inputRefs = useRef([]);
   
   const fetchStudents = async (assignmentId) => {
     try {
@@ -258,14 +259,26 @@ function GradesSection({ assignments }) {
     }
   }, [selectedAssignment, academicYear]);
 
-  const handleMarksChange = (studentId, marks) => {
+  const handleMarksChange = (studentId, marks, currentIndex) => {
+    const maxMarks = getMaxMarks();
+    if (marks && parseFloat(marks) > maxMarks) {
+      alert(`Invalid marks! Maximum allowed is ${maxMarks}`);
+      return;
+    }
     setStudents(students.map(student => 
       student.id === studentId ? { ...student, marks } : student
     ));
+    
+    // Auto-advance to next input if 2 digits entered and not last input
+    if (marks && marks.length === 2 && currentIndex < students.length - 1) {
+      setTimeout(() => {
+        inputRefs.current[currentIndex + 1]?.focus();
+      }, 50);
+    }
   };
 
   const saveGrades = async () => {
-    if (!selectedAssignment || !gradeType || !gradeCategory) {
+    if (!selectedAssignment || !gradeType) {
       alert('Please fill all required fields');
       return;
     }
@@ -283,16 +296,14 @@ function GradesSection({ assignments }) {
         body: JSON.stringify({
           students: students.map(s => ({ 
             id: s.id, 
-            marks: gradeType === 'Semester' ? s.marks : parseFloat(s.marks) || 0 
+            marks: gradeType === 'Semester' ? null : parseFloat(s.marks) || 0,
+            grade: gradeType === 'Semester' ? s.marks : null
           })),
           subject_code: assignment?.subject_code,
-          department: assignment?.department,
-          year: assignment?.year,
+          subject_name: assignment?.subject_name,
           semester: assignment?.semester,
           grade_type: gradeType,
-          grade_category: gradeCategory,
-          max_marks: maxMarks,
-          academic_year: academicYear || new Date().getFullYear().toString()
+          academic_year: new Date().getFullYear().toString()
         })
       });
 
@@ -320,20 +331,20 @@ function GradesSection({ assignments }) {
 
   const getMaxMarks = () => {
     if (gradeType === 'Assignment') return 40;
-    if (gradeType === 'IA') return 50;
+    if (gradeType === 'IA1' || gradeType === 'IA2' || gradeType === 'IA3') return 50;
     if (gradeType === 'Semester') return 'Grade';
-    return 0;
+    return 50;
   };
 
   const getGradeOptions = () => {
-    return ['O+', 'O', 'A+', 'A', 'B+', 'B', 'C+', 'C', 'U/A'];
+    return ['O', 'A+', 'A', 'B+', 'B', 'C', 'RA', 'Ab'];
   };
 
   return (
     <div className="grades-section">
       <h2>Grade Management</h2>
       
-      <div className="grade-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
+      <div className="grade-filters" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '20px' }}>
         <select value={selectedAssignment} onChange={(e) => setSelectedAssignment(e.target.value)}>
           <option value="">Select Subject Assignment</option>
           {assignments.map(assignment => (
@@ -343,33 +354,18 @@ function GradesSection({ assignments }) {
           ))}
         </select>
         
-        <select value={gradeType} onChange={(e) => { setGradeType(e.target.value); setGradeCategory(''); }}>
+        <select value={gradeType} onChange={(e) => setGradeType(e.target.value)}>
           <option value="">Select Grade Type</option>
-          <option value="Assignment">Assignment (40 marks)</option>
-          <option value="IA">IA (50 marks)</option>
-          <option value="Semester">Semester Exam (Grade)</option>
-        </select>
-        
-        {gradeType && (
-          <select value={gradeCategory} onChange={(e) => setGradeCategory(e.target.value)}>
-            <option value="">Select Category</option>
-            {getCategoryOptions().map(option => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        )}
-        
-        <select value={academicYear} onChange={(e) => setAcademicYear(e.target.value)}>
-          <option value="">Current Year (2024)</option>
-          <option value="2023">2023</option>
-          <option value="2022">2022</option>
-          <option value="2021">2021</option>
+          <option value="IA1">IA 1 (50 marks)</option>
+          <option value="IA2">IA 2 (50 marks)</option>
+          <option value="IA3">IA 3 (50 marks)</option>
+          <option value="Semester">Semester Grade</option>
         </select>
       </div>
 
-      {selectedAssignment && gradeType && gradeCategory && (
+      {selectedAssignment && gradeType && (
         <div className="grades-table">
-          <h3>Enter {gradeType === 'Semester' ? 'Grades' : 'Marks'} - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} ({gradeCategory}) - Max: {getMaxMarks()} {academicYear && `(Academic Year: ${academicYear})`}</h3>
+          <h3>Enter {gradeType === 'Semester' ? 'Grades' : 'Marks'} - {assignments.find(a => a.id.toString() === selectedAssignment)?.subject_code} ({gradeType}) - Max: {getMaxMarks()}</h3>
           <table>
             <thead>
               <tr>
@@ -379,7 +375,7 @@ function GradesSection({ assignments }) {
               </tr>
             </thead>
             <tbody>
-              {students.map(student => (
+              {students.map((student, index) => (
                 <tr key={student.id}>
                   <td>{student.regNo}</td>
                   <td>{student.name}</td>
@@ -387,7 +383,7 @@ function GradesSection({ assignments }) {
                     {gradeType === 'Semester' ? (
                       <select
                         value={student.marks}
-                        onChange={(e) => handleMarksChange(student.id, e.target.value)}
+                        onChange={(e) => handleMarksChange(student.id, e.target.value, index)}
                         style={{ width: '100px' }}
                       >
                         <option value="">Select Grade</option>
@@ -397,13 +393,15 @@ function GradesSection({ assignments }) {
                       </select>
                     ) : (
                       <input
+                        ref={(el) => inputRefs.current[index] = el}
                         type="number"
                         min="0"
                         max={getMaxMarks()}
                         value={student.marks}
-                        onChange={(e) => handleMarksChange(student.id, e.target.value)}
+                        onChange={(e) => handleMarksChange(student.id, e.target.value, index)}
                         placeholder="0"
                         style={{ width: '80px' }}
+                        className="no-spinner"
                       />
                     )}
                   </td>

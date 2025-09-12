@@ -179,11 +179,7 @@ db.serialize(() => {
     }
   });
   
-  db.run(`ALTER TABLE grades ADD COLUMN academic_year TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding academic_year column to grades:', err);
-    }
-  });
+
   
   db.run(`ALTER TABLE staff_assignments ADD COLUMN section TEXT DEFAULT 'A'`, (err) => {
     if (err && !err.message.includes('duplicate column name')) {
@@ -234,6 +230,21 @@ db.serialize(() => {
     }
   });
 });
+
+// Create student results table without grade_points
+db.run(`CREATE TABLE IF NOT EXISTS student_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  register_no TEXT NOT NULL,
+  subject_code TEXT NOT NULL,
+  semester INTEGER NOT NULL,
+  academic_year TEXT NOT NULL,
+  ia1_marks INTEGER,
+  ia2_marks INTEGER,
+  ia3_marks INTEGER,
+  semester_grade TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(register_no, subject_code, semester, academic_year)
+)`);
 
 // Student login
 app.post('/api/student/login', (req, res) => {
@@ -1100,9 +1111,9 @@ app.get('/api/staff/students/:assignmentId', authenticateToken, (req, res) => {
           db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, c.section 
                   FROM users u 
                   LEFT JOIN classes c ON u.class_id = c.id 
-                  WHERE u.role = 'student' AND (c.department = ? AND c.year = ? OR u.department = ?)
+                  WHERE u.role = 'student' AND u.current_semester = ? AND (c.department = ? AND c.year = ? OR u.department = ?)
                   ORDER BY c.section, u.register_no`,
-            [assignment.department, assignment.year, assignment.department], (err, students) => {
+            [assignment.semester, assignment.department, assignment.year, assignment.department], (err, students) => {
               if (err) {
                 console.error('Students query error:', err);
                 return res.status(500).json({ error: 'Database error' });
@@ -1192,70 +1203,214 @@ app.get('/api/debug/attendance', authenticateToken, (req, res) => {
   });
 });
 
-// Create grades table
+// Create grades table with new structure (preserve existing data)
 db.run(`CREATE TABLE IF NOT EXISTS grades (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL,
-  staff_id TEXT NOT NULL,
   subject_code TEXT NOT NULL,
-  department TEXT NOT NULL,
-  year TEXT NOT NULL,
-  semester TEXT NOT NULL,
-  grade_type TEXT NOT NULL,
-  grade_category TEXT,
-  marks REAL NOT NULL,
-  max_marks REAL NOT NULL,
+  subject_name TEXT,
+  semester INTEGER NOT NULL,
+  ia1_marks INTEGER,
+  ia2_marks INTEGER,
+  ia3_marks INTEGER,
+  semester_grade TEXT,
   academic_year TEXT DEFAULT '2024',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(student_id, subject_code, grade_type, grade_category, academic_year)
+  UNIQUE(student_id, subject_code, semester, academic_year)
 )`);
 
-// Create semester results table
-db.run(`CREATE TABLE IF NOT EXISTS semester_results (
+// Create student GPA tables if not exists
+db.run(`CREATE TABLE IF NOT EXISTS student_gpa (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL,
   semester INTEGER NOT NULL,
   academic_year TEXT NOT NULL,
-  sgpa REAL,
-  cgpa REAL,
+  sgpa REAL NOT NULL,
   total_credits INTEGER DEFAULT 0,
   earned_credits INTEGER DEFAULT 0,
-  status TEXT DEFAULT 'pending',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(student_id, semester, academic_year)
 )`);
 
+db.run(`CREATE TABLE IF NOT EXISTS student_cgpa (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL UNIQUE,
+  cgpa REAL NOT NULL,
+  total_semesters INTEGER DEFAULT 0,
+  total_credits INTEGER DEFAULT 0,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+// Clear all existing data
+// db.run('DELETE FROM student_results');
+
+// Grade point calculation function
+function calculateGradePoints(grade) {
+  const gradeMap = {
+    'O': 10, 'A+': 9, 'A': 8, 'B+': 7, 'B': 6,
+    'C': 5, 'P': 4, 'RA': 0, 'Ab': 0, 'F': 0
+  };
+  const points = gradeMap[grade?.trim()] || 0;
+  return points;
+}
+
+// Calculate SGPA for a semester
+function calculateSGPA(grades, subjects) {
+  let totalCredits = 0;
+  let totalGradePoints = 0;
+  
+  grades.forEach(grade => {
+    if (grade.semester_grade) {
+      const subject = subjects.find(s => s.subject_code === grade.subject_code);
+      const credits = subject ? subject.credits : 3;
+      const gradePoints = calculateGradePoints(grade.semester_grade);
+      
+      totalCredits += credits;
+      totalGradePoints += (gradePoints * credits);
+    }
+  });
+  
+  return {
+    sgpa: totalCredits > 0 ? parseFloat((totalGradePoints / totalCredits).toFixed(2)) : 0,
+    totalCredits,
+    earnedCredits: totalCredits
+  };
+}
+
+// Calculate and store GPA for student
+function calculateAndStoreGPA(studentId, semester, academicYear, callback) {
+  // Get grades for this semester
+  db.all('SELECT * FROM grades WHERE student_id = ? AND semester = ? AND academic_year = ? AND semester_grade IS NOT NULL',
+    [studentId, semester, academicYear], (err, grades) => {
+      if (err) return callback(err);
+      
+      // Get student department for subjects
+      db.get('SELECT department FROM users WHERE id = ?', [studentId], (err, student) => {
+        if (err) return callback(err);
+        
+        // Get subjects for credits
+        db.all('SELECT * FROM subjects WHERE department = ?', [student.department], (err, subjects) => {
+          if (err) return callback(err);
+          
+          const semesterResult = calculateSGPA(grades, subjects);
+          
+          // Store SGPA in student_gpa table
+          db.run(`INSERT OR REPLACE INTO student_gpa 
+                  (student_id, semester, academic_year, sgpa, total_credits, earned_credits) 
+                  VALUES (?, ?, ?, ?, ?, ?)`,
+            [studentId, semester, academicYear, semesterResult.sgpa, semesterResult.totalCredits, semesterResult.earnedCredits],
+            (err) => {
+              if (err) return callback(err);
+              
+              // Calculate and update CGPA
+              updateStudentCGPA(studentId, callback);
+            }
+          );
+        });
+      });
+    });
+}
+
+// Update CGPA in separate table
+function updateStudentCGPA(studentId, callback) {
+  // Get all SGPAs for this student
+  db.all('SELECT sgpa, total_credits FROM student_gpa WHERE student_id = ? ORDER BY academic_year, semester',
+    [studentId], (err, gpaRecords) => {
+      if (err) return callback(err);
+      
+      if (gpaRecords.length === 0) return callback();
+      
+      // Calculate CGPA as average of all SGPAs
+      const totalSGPA = gpaRecords.reduce((sum, record) => sum + record.sgpa, 0);
+      const cgpa = parseFloat((totalSGPA / gpaRecords.length).toFixed(2));
+      const totalCredits = gpaRecords.reduce((sum, record) => sum + record.total_credits, 0);
+      
+      // Store in student_cgpa table
+      db.run(`INSERT OR REPLACE INTO student_cgpa 
+              (student_id, cgpa, total_semesters, total_credits, updated_at) 
+              VALUES (?, ?, ?, ?, datetime('now'))`,
+        [studentId, cgpa, gpaRecords.length, totalCredits],
+        callback
+      );
+    }
+  );
+}
+
+
+
 // Save grades endpoint
 app.post('/api/staff/grades', authenticateToken, (req, res) => {
-  const { students, subject_code, department, year, semester, grade_type, grade_category, max_marks, academic_year } = req.body;
-  const staff_id = req.user.staff_id || req.user.id;
+  const { students, subject_code, subject_name, semester, grade_type, academic_year } = req.body;
   const finalAcademicYear = academic_year || new Date().getFullYear().toString();
   
-  console.log('Saving grades:', { students: students.length, subject_code, grade_type, grade_category, academic_year: finalAcademicYear });
+  console.log('Saving grades:', { students: students.length, subject_code, grade_type, academic_year: finalAcademicYear });
   
   const promises = students.map(student => 
     new Promise((resolve, reject) => {
-      console.log('Saving grade for student:', student.id, 'marks:', student.marks, 'academic_year:', finalAcademicYear);
-      db.run(`INSERT OR REPLACE INTO grades 
-              (student_id, staff_id, subject_code, department, year, semester, grade_type, grade_category, marks, max_marks, academic_year) 
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [student.id, staff_id, subject_code, department, year, semester, grade_type, grade_category, student.marks, max_marks, finalAcademicYear],
-        function(err) {
+      console.log('Saving grade for student:', student.id, 'academic_year:', finalAcademicYear);
+      
+      // Get existing record or create new one
+      db.get('SELECT * FROM grades WHERE student_id = ? AND subject_code = ? AND semester = ? AND academic_year = ?',
+        [student.id, subject_code, semester, finalAcademicYear], (err, existing) => {
           if (err) {
-            console.error('Grade save error:', err);
             reject(err);
-          } else {
-            console.log('Grade saved for student:', student.id, 'Row ID:', this.lastID);
-            resolve();
+            return;
           }
-        }
-      );
+          
+          let query, params;
+          if (existing) {
+            // Update existing record based on grade_type
+            if (grade_type === 'IA1') {
+              query = 'UPDATE grades SET ia1_marks = ? WHERE id = ?';
+              params = [student.marks, existing.id];
+            } else if (grade_type === 'IA2') {
+              query = 'UPDATE grades SET ia2_marks = ? WHERE id = ?';
+              params = [student.marks, existing.id];
+            } else if (grade_type === 'IA3') {
+              query = 'UPDATE grades SET ia3_marks = ? WHERE id = ?';
+              params = [student.marks, existing.id];
+            } else if (grade_type === 'Semester') {
+              query = 'UPDATE grades SET semester_grade = ? WHERE id = ?';
+              params = [student.grade, existing.id];
+            }
+          } else {
+            // Create new record
+            query = 'INSERT INTO grades (student_id, subject_code, subject_name, semester, academic_year, ia1_marks, ia2_marks, ia3_marks, semester_grade) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+            params = [
+              student.id, subject_code, subject_name, semester, finalAcademicYear,
+              grade_type === 'IA1' ? student.marks : null,
+              grade_type === 'IA2' ? student.marks : null,
+              grade_type === 'IA3' ? student.marks : null,
+              grade_type === 'Semester' ? student.grade : null
+            ];
+          }
+          
+          db.run(query, params, function(err) {
+            if (err) {
+              console.error('Grade save error:', err);
+              reject(err);
+            } else {
+              console.log('Grade saved for student:', student.id);
+              resolve();
+            }
+          });
+        });
     })
   );
   
   Promise.all(promises)
     .then(() => {
       console.log('All grades saved successfully');
+      
+      // Auto-calculate GPA for affected students if semester grades were saved
+      if (grade_type === 'Semester') {
+        students.forEach(student => {
+          calculateAndStoreGPA(student.id, semester, finalAcademicYear, (err) => {
+            if (err) console.error('Auto GPA calculation failed for student:', student.id, err);
+          });
+        });
+      }
+      
       res.json({ message: 'Grades saved successfully' });
     })
     .catch(err => {
@@ -1267,7 +1422,7 @@ app.post('/api/staff/grades', authenticateToken, (req, res) => {
 // Get grades for a subject
 app.get('/api/staff/grades/:assignmentId', authenticateToken, (req, res) => {
   const { assignmentId } = req.params;
-  const { grade_type, grade_category, academic_year } = req.query;
+  const { grade_type, academic_year } = req.query;
   
   db.get('SELECT * FROM staff_assignments WHERE id = ?', [assignmentId], (err, assignment) => {
     if (err || !assignment) return res.status(404).json({ error: 'Assignment not found' });
@@ -1275,8 +1430,8 @@ app.get('/api/staff/grades/:assignmentId', authenticateToken, (req, res) => {
     let query = `SELECT g.*, u.name, u.register_no 
                  FROM grades g 
                  JOIN users u ON g.student_id = u.id 
-                 WHERE g.subject_code = ? AND g.grade_type = ? AND g.grade_category = ?`;
-    let params = [assignment.subject_code, grade_type, grade_category];
+                 WHERE g.subject_code = ?`;
+    let params = [assignment.subject_code];
     
     if (academic_year) {
       query += ` AND g.academic_year = ?`;
@@ -1418,10 +1573,9 @@ app.get('/api/student/grades', authenticateToken, (req, res) => {
     
     console.log('Student info:', { id: student.id, department: student.department, register_no: student.register_no });
     
-    // Build query with filters
-    let query = `SELECT g.*, sa.subject_name 
+    // Build query with filters - use new grades table structure
+    let query = `SELECT g.*, g.subject_name 
                  FROM grades g 
-                 LEFT JOIN staff_assignments sa ON (g.subject_code = sa.subject_code AND g.department = sa.department AND g.year = sa.year)
                  WHERE g.student_id = ?`;
     let params = [studentId];
     
@@ -1435,7 +1589,7 @@ app.get('/api/student/grades', authenticateToken, (req, res) => {
       params.push(academic_year);
     }
     
-    query += ` ORDER BY g.subject_code, g.grade_type, g.grade_category`;
+    query += ` ORDER BY g.subject_code`;
     
     // Get all grades for this student
     db.all(query, params, (err, grades) => {
@@ -1449,52 +1603,43 @@ app.get('/api/student/grades', authenticateToken, (req, res) => {
         console.log('Sample grade:', grades[0]);
       }
       
-      // Group grades by subject and type
-      const subjectGrades = {};
-      
-      grades.forEach(grade => {
-        const key = grade.subject_code;
-        if (!subjectGrades[key]) {
-          subjectGrades[key] = {
-            subject_code: grade.subject_code,
-            subject_name: grade.subject_name || grade.subject_code,
-            assignment1: null,
-            assignment2: null,
-            assignment3: null,
-            ia1: null,
-            ia2: null,
-            ia3: null,
-            grade: null
-          };
-        }
-        
-        if (grade.grade_type === 'Assignment') {
-          if (grade.grade_category === 'Assignment 1') subjectGrades[key].assignment1 = grade.marks;
-          if (grade.grade_category === 'Assignment 2') subjectGrades[key].assignment2 = grade.marks;
-          if (grade.grade_category === 'Assignment 3') subjectGrades[key].assignment3 = grade.marks;
-        } else if (grade.grade_type === 'IA') {
-          if (grade.grade_category === 'IA 1') subjectGrades[key].ia1 = grade.marks;
-          if (grade.grade_category === 'IA 2') subjectGrades[key].ia2 = grade.marks;
-          if (grade.grade_category === 'IA 3') subjectGrades[key].ia3 = grade.marks;
-        } else if (grade.grade_type === 'Semester') {
-          subjectGrades[key].grade = grade.marks;
-        }
-      });
-      
-      const subjects = Object.values(subjectGrades);
+      // Transform grades to match expected format
+      const subjects = grades.map(grade => ({
+        subject_code: grade.subject_code,
+        subject_name: grade.subject_name || grade.subject_code,
+        ia1: grade.ia1_marks,
+        ia2: grade.ia2_marks,
+        ia3: grade.ia3_marks,
+        grade: grade.semester_grade,
+        semester: grade.semester,
+        academic_year: grade.academic_year
+      }));
       
       console.log('Returning subjects with grades:', subjects.length);
       
-      res.json({
-        assignments: subjects,
-        ias: subjects,
-        semesters: subjects,
-        debug: {
-          studentId,
-          totalGrades: grades.length,
-          rawGrades: grades
+      // Get stored GPA from both tables
+      db.get('SELECT sgpa FROM student_gpa WHERE student_id = ? ORDER BY academic_year DESC, semester DESC LIMIT 1',
+        [studentId], (err, sgpaRecord) => {
+          if (err) return res.status(500).json({ error: 'Database error' });
+          
+          db.get('SELECT cgpa FROM student_cgpa WHERE student_id = ?', [studentId], (err, cgpaRecord) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            
+            res.json({
+              assignments: subjects,
+              ias: subjects,
+              semesters: subjects,
+              gpa: cgpaRecord ? cgpaRecord.cgpa : 0,
+              sgpa: sgpaRecord ? sgpaRecord.sgpa : 0,
+              debug: {
+                studentId,
+                totalGrades: grades.length,
+                rawGrades: grades
+              }
+            });
+          });
         }
-      });
+      );
     });
   });
 });
@@ -1504,6 +1649,102 @@ app.get('/api/debug/grades', authenticateToken, (req, res) => {
   db.all('SELECT * FROM grades ORDER BY created_at DESC', (err, grades) => {
     if (err) return res.status(500).json({ error: 'Database error' });
     res.json(grades);
+  });
+});
+
+// Clear grades table
+app.delete('/api/debug/clear-grades', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM grades', function(err) {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ message: `${this.changes} grades deleted successfully` });
+  });
+});
+
+// Clear student_results table
+app.delete('/api/debug/clear-student-results', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM student_results', function(err) {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    res.json({ message: `${this.changes} student results deleted successfully` });
+  });
+});
+
+// Clear student_gpa table
+app.delete('/api/debug/clear-student-gpa', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM student_gpa', function(err1) {
+    if (err1) return res.status(500).json({ error: 'Database error' });
+    const sgpaDeleted = this.changes;
+    
+    db.run('DELETE FROM student_cgpa', function(err2) {
+      if (err2) return res.status(500).json({ error: 'Database error' });
+      const cgpaDeleted = this.changes;
+      
+      res.json({ 
+        message: `${sgpaDeleted} SGPA records and ${cgpaDeleted} CGPA records deleted successfully`,
+        sgpa_deleted: sgpaDeleted,
+        cgpa_deleted: cgpaDeleted
+      });
+    });
+  });
+});
+
+// Debug endpoint to check student_results data
+app.get('/api/debug/student-results', (req, res) => {
+  db.all('SELECT * FROM student_results LIMIT 10', (err, results) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    
+    // Test grade point calculation on sample data
+    const testResults = results.map(r => ({
+      ...r,
+      calculated_points: calculateGradePoints(r.semester_grade)
+    }));
+    
+    res.json({ 
+      sample_data: testResults,
+      total_count: results.length,
+      grade_test: {
+        'A+': calculateGradePoints('A+'),
+        'A': calculateGradePoints('A'),
+        'O': calculateGradePoints('O')
+      }
+    });
+  });
+});
+
+// Test endpoint for specific register number
+app.get('/api/debug/test-register/:register_no', (req, res) => {
+  const { register_no } = req.params;
+  db.all('SELECT * FROM student_results WHERE register_no = ?', [register_no], (err, results) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    
+    // Test GPA calculation for this student
+    let totalCredits = 0;
+    let totalGradePoints = 0;
+    
+    const processedResults = results.map(result => {
+      const credits = 3;
+      const gradePoints = calculateGradePoints(result.semester_grade);
+      totalCredits += credits;
+      totalGradePoints += (gradePoints * credits);
+      
+      return {
+        ...result,
+        grade_points: gradePoints,
+        credits: credits
+      };
+    });
+    
+    const sgpa = totalCredits > 0 ? parseFloat((totalGradePoints / totalCredits).toFixed(2)) : 0;
+    
+    res.json({ 
+      register_no, 
+      count: results.length, 
+      results: processedResults,
+      calculation: {
+        total_credits: totalCredits,
+        total_grade_points: totalGradePoints,
+        calculated_sgpa: sgpa
+      }
+    });
   });
 });
 
@@ -2017,12 +2258,385 @@ app.put('/api/admin/fix-student-classes', authenticateToken, requireAdmin, (req,
   });
 });
 
-// Admin routes (commented out as routes/admin doesn't exist)
-// const adminRoutes = require('./routes/admin');
-// app.use('/api/admin', authenticateToken, requireAdmin, (req, res, next) => {
-//   req.db = db;
-//   next();
-// }, adminRoutes);
+// Student results endpoints
+app.post('/api/student-results/import', authenticateToken, requireAdmin, (req, res, next) => {
+  upload.single('csvFile')(req, res, (err) => {
+    if (err) {
+      console.error('File upload error:', err);
+      return res.status(400).json({ error: 'File upload failed', details: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No CSV file uploaded' });
+  }
+
+  const results = [];
+  const errors = [];
+  let rowNum = 0;
+  
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      rowNum++;
+      const values = Object.values(data);
+      const result = {
+        register_no: values[0]?.trim(),
+        subject_code: values[1]?.trim(),
+        semester: parseInt(values[2]) || 0,
+        academic_year: values[3]?.trim(),
+        ia1_marks: parseInt(values[4]) || null,
+        ia2_marks: parseInt(values[5]) || null,
+        ia3_marks: parseInt(values[6]) || null,
+        semester_grade: values[7]?.trim()
+      };
+      
+      if (!result.register_no || !result.subject_code || !result.semester_grade) {
+        errors.push(`Row ${rowNum}: Missing required fields`);
+      } else {
+        results.push(result);
+      }
+    })
+    .on('end', async () => {
+      if (results.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'No valid results found', details: errors });
+      }
+
+      let imported = 0;
+      let duplicates = 0;
+      
+      for (const result of results) {
+        try {
+          await new Promise((resolve, reject) => {
+            db.run(`INSERT OR REPLACE INTO student_results 
+                    (register_no, subject_code, semester, academic_year, ia1_marks, ia2_marks, ia3_marks, semester_grade) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [result.register_no, result.subject_code, result.semester, result.academic_year, 
+               result.ia1_marks, result.ia2_marks, result.ia3_marks, result.semester_grade],
+              function(err) {
+                if (err) reject(err);
+                else { imported++; resolve(); }
+              }
+            );
+          });
+        } catch (error) {
+          errors.push(`Error importing ${result.register_no}: ${error.message}`);
+        }
+      }
+      
+      fs.unlinkSync(req.file.path);
+      
+      res.json({
+        message: `${imported} student results imported successfully`,
+        imported,
+        errors: errors.slice(0, 5)
+      });
+    })
+    .on('error', () => {
+      fs.unlinkSync(req.file.path);
+      res.status(500).json({ error: 'CSV processing failed' });
+    });
+});
+
+// Get student results template
+app.get('/api/student-results/template', authenticateToken, requireAdmin, (req, res) => {
+  const csvContent = 'register_no,subject_code,semester,academic_year,ia1_marks,ia2_marks,ia3_marks,semester_grade\n' +
+                    'STUIT2501,CS3551,5,2023,45,42,48,A+\n' +
+                    'STUIT2501,CS3552,5,2023,40,38,45,A\n' +
+                    'STUIT2502,CS3551,5,2023,48,46,49,O';
+  
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=student_results_template.csv');
+  res.send(csvContent);
+});
+
+// Get student results by register number
+app.get('/api/student-results/:register_no', authenticateToken, (req, res) => {
+  const { register_no } = req.params;
+  const { semester, academic_year } = req.query;
+  
+  console.log('Fetching student results for:', register_no, 'semester:', semester, 'academic_year:', academic_year);
+  
+  // Get student department first
+  db.get('SELECT department FROM users WHERE register_no = ?', [register_no], (err, student) => {
+    if (err) {
+      console.error('Error getting student department:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    
+    const studentDept = student?.department || 'IT';
+    
+    let query = `SELECT DISTINCT sr.subject_code, sr.semester, sr.academic_year, sr.ia1_marks, sr.ia2_marks, sr.ia3_marks, sr.semester_grade, s.subject_name, s.credits 
+                 FROM student_results sr 
+                 LEFT JOIN subjects s ON (sr.subject_code = s.subject_code AND CAST(sr.semester AS TEXT) = s.semester AND s.department = ?) 
+                 WHERE sr.register_no = ?`;
+    let queryParams = [studentDept, register_no];
+  let params = [register_no];
+  
+    if (semester) {
+      query += ` AND sr.semester = ?`;
+      queryParams.push(semester);
+    }
+    
+    if (academic_year) {
+      query += ` AND sr.academic_year = ?`;
+      queryParams.push(academic_year);
+    }
+    
+    query += ` ORDER BY sr.semester, sr.subject_code`;
+    
+    console.log('Query:', query, 'Params:', queryParams);
+    
+    db.all(query, queryParams, (err, results) => {
+      if (err) {
+        console.error('Database error:', err);
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      console.log('Found results:', results.length);
+      
+      // Add calculated grade points
+      const resultsWithGradePoints = results.map(result => ({
+        ...result,
+        grade_points: calculateGradePoints(result.semester_grade)
+      }));
+      
+      res.json(resultsWithGradePoints);
+    });
+  });
+});
+
+// Quick delete endpoints (use with caution)
+app.delete('/api/clear-results-now', (req, res) => {
+  db.run('DELETE FROM student_results', function(err1) {
+    const resultsDeleted = this.changes;
+    db.run('DELETE FROM student_gpa', function(err2) {
+      const sgpaDeleted = this.changes;
+      db.run('DELETE FROM student_cgpa', function(err3) {
+        const cgpaDeleted = this.changes;
+        res.json({ 
+          message: `Cleared ${resultsDeleted} student results, ${sgpaDeleted} SGPA records, and ${cgpaDeleted} CGPA records`,
+          student_results_deleted: resultsDeleted,
+          student_gpa_deleted: sgpaDeleted,
+          student_cgpa_deleted: cgpaDeleted
+        });
+      });
+    });
+  });
+});
+
+// Get student GPA from stored tables
+app.get('/api/student/gpa', authenticateToken, (req, res) => {
+  const studentId = req.user.id;
+  const { semester, academic_year } = req.query;
+  
+  // Get SGPA records
+  let sgpaQuery = 'SELECT * FROM student_gpa WHERE student_id = ?';
+  let sgpaParams = [studentId];
+  
+  if (semester) {
+    sgpaQuery += ' AND semester = ?';
+    sgpaParams.push(semester);
+  }
+  if (academic_year) {
+    sgpaQuery += ' AND academic_year = ?';
+    sgpaParams.push(academic_year);
+  }
+  
+  sgpaQuery += ' ORDER BY academic_year DESC, semester DESC';
+  
+  db.all(sgpaQuery, sgpaParams, (err, gpaRecords) => {
+    if (err) return res.status(500).json({ error: 'Database error' });
+    
+    // Get CGPA from separate table
+    db.get('SELECT * FROM student_cgpa WHERE student_id = ?', [studentId], (err, cgpaRecord) => {
+      if (err) return res.status(500).json({ error: 'Database error' });
+      
+      const latestSGPA = gpaRecords[0];
+      
+      res.json({
+        records: gpaRecords,
+        current: {
+          sgpa: latestSGPA ? latestSGPA.sgpa : 0,
+          cgpa: cgpaRecord ? cgpaRecord.cgpa : 0,
+          semester: latestSGPA ? latestSGPA.semester : null,
+          academic_year: latestSGPA ? latestSGPA.academic_year : null,
+          total_semesters: cgpaRecord ? cgpaRecord.total_semesters : 0
+        }
+      });
+    });
+  });
+});
+
+// Calculate GPA from student_results table
+function calculateGPAFromResults(registerNo, semester, academicYear, callback) {
+  db.get('SELECT id FROM users WHERE register_no = ?', [registerNo], (err, student) => {
+    if (err || !student) return callback(err || new Error('Student not found'));
+    
+    // Get results for specific semester and academic year only
+    db.all('SELECT * FROM student_results WHERE register_no = ? AND semester = ? AND academic_year = ? AND semester_grade IS NOT NULL',
+      [registerNo, semester, academicYear], (err, results) => {
+        if (err) return callback(err);
+        
+        let totalCredits = 0;
+        let totalGradePoints = 0;
+        
+        console.log(`Found ${results.length} results for ${registerNo} semester ${semester} year ${academicYear}`);
+        
+        results.forEach(result => {
+          const credits = 3;
+          const gradePoints = calculateGradePoints(result.semester_grade);
+          totalCredits += credits;
+          totalGradePoints += (gradePoints * credits);
+          console.log(`${result.subject_code}: ${result.semester_grade} = ${gradePoints} points`);
+        });
+        
+        const sgpa = totalCredits > 0 ? parseFloat((totalGradePoints / totalCredits).toFixed(2)) : 0;
+        console.log(`Total: ${totalGradePoints}/${totalCredits} = SGPA: ${sgpa}`);
+        
+        // Store SGPA in student_gpa table
+        db.run(`INSERT OR REPLACE INTO student_gpa 
+                (student_id, semester, academic_year, sgpa, total_credits, earned_credits) 
+                VALUES (?, ?, ?, ?, ?, ?)`,
+          [student.id, semester, academicYear, sgpa, totalCredits, totalCredits],
+          (err) => {
+            if (err) return callback(err);
+            updateStudentCGPA(student.id, callback);
+          }
+        );
+      }
+    );
+  });
+}
+
+// Student calculate own GPA
+app.post('/api/student/calculate-gpa', authenticateToken, (req, res) => {
+  const studentId = req.user.id;
+  
+  db.get('SELECT register_no FROM users WHERE id = ?', [studentId], (err, student) => {
+    if (err || !student) return res.status(500).json({ error: 'Student not found' });
+    
+    db.all('SELECT DISTINCT semester, academic_year FROM student_results WHERE register_no = ? AND semester_grade IS NOT NULL',
+      [student.register_no], (err, resultSemesters) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        
+        let completed = 0;
+        const total = resultSemesters.length;
+        
+        if (total === 0) {
+          return res.json({ message: 'No semester results found' });
+        }
+        
+        resultSemesters.forEach(sem => {
+          calculateGPAFromResults(student.register_no, sem.semester, sem.academic_year, (err) => {
+            completed++;
+            if (completed === total) {
+              res.json({ message: `GPA calculated for ${total} semesters from results` });
+            }
+          });
+        });
+      }
+    );
+  });
+});
+
+// Admin trigger GPA calculation
+app.post('/api/admin/calculate-gpa', authenticateToken, requireAdmin, (req, res) => {
+  const { student_id, semester, academic_year } = req.body;
+  
+  calculateAndStoreGPA(student_id, semester, academic_year, (err) => {
+    if (err) return res.status(500).json({ error: 'GPA calculation failed' });
+    res.json({ message: 'GPA calculated and stored successfully' });
+  });
+});
+
+// Calculate GPA for all students from student_results
+app.post('/api/admin/calculate-all-gpa', authenticateToken, requireAdmin, (req, res) => {
+  db.all('SELECT DISTINCT register_no FROM student_results', (err, students) => {
+    console.log(`Found ${students?.length || 0} students with results`);
+    if (students && students.length > 0) {
+      console.log(`First student: ${students[0].register_no}`);
+    }
+    if (err) return res.status(500).json({ error: 'Database error' });
+    
+    let processed = 0;
+    const total = students.length;
+    
+    if (total === 0) {
+      return res.json({ message: 'No student results found' });
+    }
+    
+    students.forEach(student => {
+      console.log(`Processing student: ${student.register_no}`);
+      
+      db.get('SELECT id FROM users WHERE register_no = ?', [student.register_no], (err, user) => {
+        if (err || !user) {
+          console.log(`User not found for ${student.register_no}`);
+          processed++;
+          if (processed === total) {
+            res.json({ message: `GPA calculated for ${total} students` });
+          }
+          return;
+        }
+        
+        db.all('SELECT DISTINCT semester, academic_year FROM student_results WHERE register_no = ?',
+          [student.register_no], (err, semesters) => {
+            if (err) {
+              processed++;
+              if (processed === total) {
+                res.json({ message: `GPA calculated for ${total} students` });
+              }
+              return;
+            }
+            
+            console.log(`Found ${semesters.length} semesters for ${student.register_no}:`, semesters);
+            
+            let semProcessed = 0;
+            semesters.forEach(sem => {
+              console.log(`Calculating for semester ${sem.semester}, year ${sem.academic_year}`);
+              calculateGPAFromResults(student.register_no, sem.semester, sem.academic_year, () => {
+                semProcessed++;
+                if (semProcessed === semesters.length) {
+                  processed++;
+                  if (processed === total) {
+                    res.json({ message: `GPA calculated for ${total} students` });
+                  }
+                }
+              });
+            });
+          }
+        );
+      });
+    });
+  });
+});
+
+// Clear all student results and GPA tables
+app.delete('/api/debug/clear-all-results', authenticateToken, requireAdmin, (req, res) => {
+  db.run('DELETE FROM student_results', function(err1) {
+    if (err1) return res.status(500).json({ error: 'Failed to clear student_results' });
+    const resultsDeleted = this.changes;
+    
+    db.run('DELETE FROM student_gpa', function(err2) {
+      if (err2) return res.status(500).json({ error: 'Failed to clear student_gpa' });
+      const sgpaDeleted = this.changes;
+      
+      db.run('DELETE FROM student_cgpa', function(err3) {
+        if (err3) return res.status(500).json({ error: 'Failed to clear student_cgpa' });
+        const cgpaDeleted = this.changes;
+        
+        res.json({ 
+          message: `${resultsDeleted} student results, ${sgpaDeleted} SGPA records, and ${cgpaDeleted} CGPA records deleted successfully`,
+          student_results_deleted: resultsDeleted,
+          student_gpa_deleted: sgpaDeleted,
+          student_cgpa_deleted: cgpaDeleted
+        });
+      });
+    });
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

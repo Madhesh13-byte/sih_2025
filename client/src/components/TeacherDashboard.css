@@ -398,6 +398,17 @@
   width: 100px;
 }
 
+/* Hide spinner arrows for number inputs */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.no-spinner[type=number] {
+  -moz-appearance: textfield;
+}
+
 .save-btn {
   display: flex;
   align-items: center;

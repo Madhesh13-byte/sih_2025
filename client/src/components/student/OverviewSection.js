@@ -3,9 +3,11 @@ import { Calendar, TrendingUp, Award, Target, Upload, BarChart3 } from 'lucide-r
 import './StudentDashboard.css';
 function OverviewSection({ user }) {
   const [overallAttendance, setOverallAttendance] = useState(0);
+  const [cgpa, setCgpa] = useState(0);
 
   useEffect(() => {
     fetchOverallAttendance();
+    fetchCGPA();
   }, []);
 
   const fetchOverallAttendance = async () => {
@@ -23,6 +25,21 @@ function OverviewSection({ user }) {
     }
   };
 
+  const fetchCGPA = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/student/gpa', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setCgpa(data.current?.cgpa || 0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch CGPA:', error);
+    }
+  };
+
   return (
     <div className="overview-section">
       <h2>Dashboard Overview</h2>
@@ -33,9 +50,11 @@ function OverviewSection({ user }) {
             <TrendingUp size={24} />
           </div>
           <div className="stat-content">
-            <h3>--</h3>
-            <p>Current GPA</p>
-            <span className="stat-trend neutral">Not available yet</span>
+            <h3>{cgpa > 0 ? cgpa : '--'}</h3>
+            <p>CGPA</p>
+            <span className={`stat-trend ${cgpa >= 8 ? 'positive' : cgpa >= 6 ? 'neutral' : 'negative'}`}>
+              {cgpa > 0 ? (cgpa >= 8 ? 'Excellent' : cgpa >= 6 ? 'Good' : 'Needs improvement') : 'Not available yet'}
+            </span>
           </div>
         </div>
 

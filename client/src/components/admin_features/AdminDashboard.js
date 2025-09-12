@@ -12,6 +12,7 @@ import CreateStaffForm from './StaffAccountForm';
 import ViewAccounts from './ViewAccounts';
 import SubjectManagement from './SubjectManagement';
 import StaffAssignments from './StaffAssignments';
+import StudentResultsManagement from './StudentResultsManagement';
 
 function AdminDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('main');
@@ -127,6 +128,10 @@ function AdminDashboard({ user, logout }) {
         {currentView === 'timetables' && (
           <TimetableManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
         )}
+        
+        {currentView === 'student-results' && (
+          <StudentResultsManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
+        )}
       </div>
     </div>
   );
@@ -183,6 +188,11 @@ function MainAdminView({ setCurrentView }) {
             <button className="admin-btn timetables" onClick={() => setCurrentView('timetables')}>
               <Calendar />
               <span>Timetable Management</span>
+            </button>
+            
+            <button className="admin-btn student-results" onClick={() => setCurrentView('student-results')}>
+              <BarChart3 />
+              <span>Student Results</span>
             </button>
           </div>
         </div>
