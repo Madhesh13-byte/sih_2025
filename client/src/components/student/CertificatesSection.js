@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Upload, Award, Star, Trophy, CheckCircle, Clock, FileText, Image, Shield, Crown, Zap, FolderOpen, Users, Medal, Sparkles, Target, TrendingUp } from 'lucide-react';
 import './StudentDashboard.css';
 
+
 function CertificatesSection({ user }) {
   const [certificates, setCertificates] = useState([]);
   const [dragActive, setDragActive] = useState(false);
@@ -10,6 +11,7 @@ function CertificatesSection({ user }) {
   const [userLevel, setUserLevel] = useState({ level: 'Beginner', points: 20, nextLevel: 100 });
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+
   const [leaderboard] = useState([
     { rank: 1, name: 'Alice Johnson', points: 450, level: 'Advanced', avatar: 'AJ' },
     { rank: 2, name: 'Bob Smith', points: 380, level: 'Advanced', avatar: 'BS' },
@@ -177,6 +179,9 @@ function CertificatesSection({ user }) {
         `}
       </style>
       <div className="certificates-section" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', minHeight: '100vh', padding: '20px' }}>
+      
+      {!showLeaderboard ? (
+      <>
       {/* Header Section */}
       <div style={{
         background: 'rgba(255, 255, 255, 0.95)',
@@ -1262,6 +1267,11 @@ function CertificatesSection({ user }) {
         </>
       )}
 
+      </>
+      ) : (
+        <div>Leaderboard content here</div>
+      )}
+      
       {/* Level Up Modal */}
       {showLevelUp && (
         <>

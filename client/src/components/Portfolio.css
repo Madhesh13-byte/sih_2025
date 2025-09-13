@@ -1,0 +1,25 @@
+@media print {
+  @page {
+    size: A4;
+    margin: 0.5in;
+  }
+  
+  .page-break {
+    page-break-before: always;
+  }
+  
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+.page-break {
+  display: none;
+}
+
+@media print {
+  .page-break {
+    display: block;
+  }
+}

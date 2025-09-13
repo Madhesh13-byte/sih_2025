@@ -10,7 +10,8 @@ import {
   Clock,
   BookOpen,
   Target,
-  Bell
+  Bell,
+  User
 } from 'lucide-react';
 import './StudentDashboard.css';
 
@@ -19,6 +20,7 @@ import OverviewSection from './OverviewSection';
 import AcademicSection from './AcademicSection';
 import AttendanceSection from './AttendanceSection';
 import CertificatesSection from './CertificatesSection';
+import PortfolioSection from './PortfolioSection';
 
 function StudentDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('overview');
@@ -77,6 +79,12 @@ function StudentDashboard({ user, logout }) {
             >
               <Award size={20} /> Certificates
             </button>
+            <button 
+              className={`nav-item ${currentView === 'portfolio' ? 'active' : ''}`}
+              onClick={() => setCurrentView('portfolio')}
+            >
+              <User size={20} /> Portfolio
+            </button>
           </nav>
         </aside>
 
@@ -85,6 +93,7 @@ function StudentDashboard({ user, logout }) {
           {currentView === 'academic' && <AcademicSection user={user} />}
           {currentView === 'attendance' && <AttendanceSection user={user} />}
           {currentView === 'certificates' && <CertificatesSection user={user} />}
+          {currentView === 'portfolio' && <PortfolioSection user={user} />}
         </main>
       </div>
     </div>

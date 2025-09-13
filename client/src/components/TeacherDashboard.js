@@ -13,8 +13,10 @@ import {
   FileText,
   Home,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Download
 } from 'lucide-react';
+import OfficialPortfolio from './OfficialPortfolio';
 import './TeacherDashboard.css';
 
 function TeacherDashboard({ user, logout }) {
@@ -734,6 +736,8 @@ function CertificatesSection() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewCert, setPreviewCert] = useState(null);
   const [remarks, setRemarks] = useState({});
+  const [showPortfolio, setShowPortfolio] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
 
   // Filter and sort certificates
   useEffect(() => {
@@ -819,6 +823,39 @@ function CertificatesSection() {
     <div className="certificates-section">
       <h2>Certificate Approval Panel</h2>
       
+      {/* Generate Portfolio Button */}
+      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => setShowPortfolio(true)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 24px',
+            background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: '600',
+            boxShadow: '0 4px 12px rgba(30, 58, 138, 0.3)',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => {
+            e.target.style.transform = 'translateY(-2px)';
+            e.target.style.boxShadow = '0 6px 16px rgba(30, 58, 138, 0.4)';
+          }}
+          onMouseOut={(e) => {
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 4px 12px rgba(30, 58, 138, 0.3)';
+          }}
+        >
+          <Download size={16} />
+          Generate Portfolio
+        </button>
+      </div>
+
       {/* Dashboard Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
         <div style={{ padding: '20px', backgroundColor: '#fff3cd', borderRadius: '8px', border: '1px solid #ffeaa7' }}>
@@ -1144,6 +1181,169 @@ function CertificatesSection() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Portfolio Generation Modal */}
+      {showPortfolio && (
+        <>
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              width: '100%',
+              maxWidth: '900px',
+              height: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+            }}>
+              <div style={{
+                padding: '20px 30px',
+                borderBottom: '1px solid #e1e8ed',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#f8f9fa'
+              }}>
+                <h3 style={{ margin: 0, color: '#1e3a8a', fontWeight: '600' }}>Official Student Portfolio</h3>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button
+                    onClick={async () => {
+                      console.log('Download PDF button clicked');
+                      try {
+                        console.log('Sending request to server...');
+                        const response = await fetch('http://localhost:5000/api/generate-portfolio-pdf', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                          },
+                          body: JSON.stringify({
+                            studentData: { regNo: '20IT101', fullName: 'John Doe', department: 'Information Technology', year: 'III', program: 'B.Tech Information Technology', cgpa: '8.5', attendance: '92%' },
+                            semesterResults: [{ semester: 'I', gpa: '8.2', credits: '24' }, { semester: 'II', gpa: '8.4', credits: '26' }, { semester: 'III', gpa: '8.6', credits: '25' }, { semester: 'IV', gpa: '8.3', credits: '24' }, { semester: 'V', gpa: '8.7', credits: '23' }],
+                            achievements: [{ sl: 1, type: 'Workshop', title: 'AI & Machine Learning Bootcamp', issuer: 'NPTEL', date: '2024-12-15', verified: true }, { sl: 2, type: 'Internship', title: 'Web Development Intern', issuer: 'TCS Limited', date: '2024-11-20', verified: true }, { sl: 3, type: 'Competition', title: 'Hackathon - 1st Place', issuer: 'IEEE Student Chapter', date: '2024-10-05', verified: true }, { sl: 4, type: 'Certification', title: 'Full Stack Development', issuer: 'Coursera', date: '2024-09-12', verified: true }, { sl: 5, type: 'Leadership', title: 'Technical Club President', issuer: 'College Tech Club', date: '2024-08-01', verified: true }]
+                          })
+                        });
+                        console.log('Response status:', response.status);
+                        if (response.ok) {
+                          console.log('Creating blob...');
+                          const blob = await response.blob();
+                          console.log('Blob size:', blob.size, 'Type:', blob.type);
+                          
+                          if (blob.size === 0) {
+                            alert('PDF file is empty');
+                            return;
+                          }
+                          
+                          const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'John_Doe_Portfolio.pdf';
+                          a.style.display = 'none';
+                          document.body.appendChild(a);
+                          a.click();
+                          
+                          setTimeout(() => {
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                          }, 100);
+                          
+                          console.log('Download initiated');
+                        } else {
+                          const errorText = await response.text();
+                          console.error('Server error:', errorText);
+                          alert('PDF generation failed: ' + response.status);
+                        }
+                      } catch (error) {
+                        console.error('PDF generation error:', error);
+                        alert('PDF generation failed: ' + error.message);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      background: '#1e3a8a',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    <Download size={14} />
+                    Download PDF
+                  </button>
+                  <button 
+                    onClick={() => setShowPortfolio(false)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '24px',
+                      cursor: 'pointer',
+                      color: '#6c757d',
+                      padding: '4px'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              
+              <div style={{ 
+                flex: 1, 
+                overflow: 'auto',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}>
+                <style>
+                  {`
+                    .portfolio-modal ::-webkit-scrollbar {
+                      display: none;
+                    }
+                    @media print {
+                      .portfolio-modal {
+                        position: static !important;
+                        width: 100% !important;
+                        height: auto !important;
+                        overflow: visible !important;
+                      }
+                      body * {
+                        visibility: hidden;
+                      }
+                      .portfolio-modal, .portfolio-modal * {
+                        visibility: visible;
+                      }
+                      .portfolio-modal {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                      }
+                    }
+                  `}
+                </style>
+                <div className="portfolio-modal">
+                  <OfficialPortfolio user={{ name: 'John Doe', register_no: '20IT101' }} isModal={true} />
+                </div>
+              </div>
             </div>
           </div>
         </>
