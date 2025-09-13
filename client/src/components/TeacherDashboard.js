@@ -12,7 +12,8 @@ import {
   Users,
   FileText,
   Home,
-  Clock
+  Clock,
+  CheckCircle
 } from 'lucide-react';
 import './TeacherDashboard.css';
 
@@ -691,6 +692,8 @@ function CertificatesSection() {
       studentName: 'John Doe', 
       regNo: 'STUIT2601',
       certificateName: 'React Workshop Certificate', 
+      organization: 'Tech Academy',
+      issueDate: '2024-01-10',
       category: 'Technical', 
       status: 'pending',
       uploadDate: '2024-01-15',
@@ -701,14 +704,79 @@ function CertificatesSection() {
       studentName: 'Jane Smith', 
       regNo: 'STUIT2602',
       certificateName: 'Basketball Tournament', 
+      organization: 'Sports Club',
+      issueDate: '2024-01-12',
       category: 'Sports', 
       status: 'pending',
       uploadDate: '2024-01-16',
       fileUrl: '#'
+    },
+    { 
+      id: 3, 
+      studentName: 'Mike Johnson', 
+      regNo: 'STUIT2603',
+      certificateName: 'Python Certification', 
+      organization: 'CodeAcademy',
+      issueDate: '2024-01-08',
+      category: 'Technical', 
+      status: 'approved',
+      uploadDate: '2024-01-14',
+      fileUrl: '#'
     }
   ]);
 
+  const [filteredCertificates, setFilteredCertificates] = useState(certificates);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('uploadDate');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewCert, setPreviewCert] = useState(null);
   const [remarks, setRemarks] = useState({});
+
+  // Filter and sort certificates
+  useEffect(() => {
+    let filtered = certificates;
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(cert => cert.status === statusFilter);
+    }
+    
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(cert => cert.category === categoryFilter);
+    }
+    
+    // Apply search
+    if (searchTerm) {
+      filtered = filtered.filter(cert => 
+        cert.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cert.regNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        cert.certificateName.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aVal = a[sortBy];
+      let bVal = b[sortBy];
+      
+      if (sortBy === 'uploadDate' || sortBy === 'issueDate') {
+        aVal = new Date(aVal);
+        bVal = new Date(bVal);
+      }
+      
+      if (sortOrder === 'asc') {
+        return aVal > bVal ? 1 : -1;
+      } else {
+        return aVal < bVal ? 1 : -1;
+      }
+    });
+    
+    setFilteredCertificates(filtered);
+  }, [certificates, statusFilter, categoryFilter, searchTerm, sortBy, sortOrder]);
 
   const handleApproval = (certId, status) => {
     setCertificates(certificates.map(cert => 
@@ -717,62 +785,369 @@ function CertificatesSection() {
     
     const remark = remarks[certId] || '';
     console.log(`Certificate ${certId} ${status} with remark: ${remark}`);
-    alert(`Certificate ${status} successfully!`);
+    
+    // Show success message
+    const message = status === 'approved' ? 'Certificate approved successfully!' : 'Certificate rejected successfully!';
+    alert(message);
   };
 
   const handleRemarkChange = (certId, remark) => {
     setRemarks({ ...remarks, [certId]: remark });
   };
 
+  const openPreview = (cert) => {
+    setPreviewCert(cert);
+    setShowPreview(true);
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'approved': return '#28a745';
+      case 'rejected': return '#dc3545';
+      case 'pending': return '#ffc107';
+      default: return '#6c757d';
+    }
+  };
+
+  const pendingCount = certificates.filter(c => c.status === 'pending').length;
+  const approvedToday = certificates.filter(c => 
+    c.status === 'approved' && 
+    new Date(c.uploadDate).toDateString() === new Date().toDateString()
+  ).length;
+
   return (
     <div className="certificates-section">
-      <h2>Certificate Approval</h2>
+      <h2>Certificate Approval Panel</h2>
       
-      <div className="certificates-list">
-        {certificates.map(cert => (
-          <div key={cert.id} className="certificate-card">
-            <div className="cert-info">
-              <h4>{cert.certificateName}</h4>
-              <p><strong>Student:</strong> {cert.studentName} ({cert.regNo})</p>
-              <p><strong>Category:</strong> {cert.category}</p>
-              <p><strong>Upload Date:</strong> {cert.uploadDate}</p>
-              <p><strong>Status:</strong> 
-                <span className={`status ${cert.status}`}>{cert.status}</span>
-              </p>
+      {/* Dashboard Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px' }}>
+        <div style={{ padding: '20px', backgroundColor: '#fff3cd', borderRadius: '8px', border: '1px solid #ffeaa7' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Clock style={{ color: '#856404' }} size={24} />
+            <div>
+              <h3 style={{ margin: 0, color: '#856404' }}>{pendingCount}</h3>
+              <p style={{ margin: 0, color: '#856404', fontSize: '14px' }}>Pending Certificates</p>
             </div>
-            
-            <div className="cert-actions">
-              <a href={cert.fileUrl} target="_blank" rel="noopener noreferrer" className="view-btn">
-                <FileText size={16} /> View Certificate
-              </a>
+          </div>
+        </div>
+        
+        <div style={{ padding: '20px', backgroundColor: '#d4edda', borderRadius: '8px', border: '1px solid #c3e6cb' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <CheckCircle style={{ color: '#155724' }} size={24} />
+            <div>
+              <h3 style={{ margin: 0, color: '#155724' }}>{approvedToday}</h3>
+              <p style={{ margin: 0, color: '#155724', fontSize: '14px' }}>Approved Today</p>
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ padding: '20px', backgroundColor: '#e2e3e5', borderRadius: '8px', border: '1px solid #d6d8db' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <FileText style={{ color: '#383d41' }} size={24} />
+            <div>
+              <h3 style={{ margin: 0, color: '#383d41' }}>{certificates.length}</h3>
+              <p style={{ margin: 0, color: '#383d41', fontSize: '14px' }}>Total Submissions</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters and Search */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(5, 1fr)', 
+        gap: '15px', 
+        marginBottom: '20px',
+        padding: '20px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px'
+      }}>
+        <input
+          type="text"
+          placeholder="Search students or certificates..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px' }}
+        />
+        
+        <select 
+          value={statusFilter} 
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px' }}
+        >
+          <option value="all">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        
+        <select 
+          value={categoryFilter} 
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px' }}
+        >
+          <option value="all">All Categories</option>
+          <option value="Technical">Technical</option>
+          <option value="Sports">Sports</option>
+          <option value="Cultural">Cultural</option>
+          <option value="Volunteer">Volunteer</option>
+        </select>
+        
+        <select 
+          value={sortBy} 
+          onChange={(e) => setSortBy(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px' }}
+        >
+          <option value="uploadDate">Sort by Upload Date</option>
+          <option value="studentName">Sort by Student Name</option>
+          <option value="certificateName">Sort by Certificate</option>
+          <option value="issueDate">Sort by Issue Date</option>
+        </select>
+        
+        <select 
+          value={sortOrder} 
+          onChange={(e) => setSortOrder(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px' }}
+        >
+          <option value="desc">Newest First</option>
+          <option value="asc">Oldest First</option>
+        </select>
+      </div>
+
+      {/* Certificates Table */}
+      <div style={{ backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead style={{ backgroundColor: '#f8f9fa' }}>
+            <tr>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #e1e8ed', fontWeight: '600' }}>Student</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #e1e8ed', fontWeight: '600' }}>Certificate</th>
+              <th style={{ padding: '15px', textAlign: 'left', borderBottom: '1px solid #e1e8ed', fontWeight: '600' }}>Organization</th>
+              <th style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #e1e8ed', fontWeight: '600' }}>Upload Date</th>
+              <th style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #e1e8ed', fontWeight: '600' }}>Status</th>
+              <th style={{ padding: '15px', textAlign: 'center', borderBottom: '1px solid #e1e8ed', fontWeight: '600' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredCertificates.map((cert, index) => (
+              <tr key={cert.id} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8f9fa' }}>
+                <td style={{ padding: '15px', borderBottom: '1px solid #e1e8ed' }}>
+                  <div>
+                    <div style={{ fontWeight: '500' }}>{cert.studentName}</div>
+                    <div style={{ fontSize: '12px', color: '#6c757d' }}>{cert.regNo}</div>
+                  </div>
+                </td>
+                <td style={{ padding: '15px', borderBottom: '1px solid #e1e8ed' }}>
+                  <div>
+                    <div style={{ fontWeight: '500' }}>{cert.certificateName}</div>
+                    <div style={{ fontSize: '12px', color: '#6c757d' }}>{cert.category}</div>
+                  </div>
+                </td>
+                <td style={{ padding: '15px', borderBottom: '1px solid #e1e8ed' }}>
+                  <div>
+                    <div>{cert.organization}</div>
+                    <div style={{ fontSize: '12px', color: '#6c757d' }}>Issued: {cert.issueDate}</div>
+                  </div>
+                </td>
+                <td style={{ padding: '15px', borderBottom: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  {cert.uploadDate}
+                </td>
+                <td style={{ padding: '15px', borderBottom: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  <span style={{
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    backgroundColor: getStatusColor(cert.status) + '20',
+                    color: getStatusColor(cert.status)
+                  }}>
+                    {cert.status.charAt(0).toUpperCase() + cert.status.slice(1)}
+                  </span>
+                </td>
+                <td style={{ padding: '15px', borderBottom: '1px solid #e1e8ed', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
+                    <button 
+                      onClick={() => openPreview(cert)}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#007bff',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      <FileText size={14} /> Preview
+                    </button>
+                    
+                    {cert.status === 'pending' && (
+                      <>
+                        <button 
+                          onClick={() => handleApproval(cert.id, 'approved')}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Check size={14} /> Approve
+                        </button>
+                        <button 
+                          onClick={() => handleApproval(cert.id, 'rejected')}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <X size={14} /> Reject
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        
+        {filteredCertificates.length === 0 && (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#6c757d' }}>
+            <FileText size={48} style={{ marginBottom: '15px' }} />
+            <h3>No certificates found</h3>
+            <p>No certificates match your current filters.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Preview Modal */}
+      {showPreview && previewCert && (
+        <>
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '8px',
+              padding: '30px',
+              maxWidth: '600px',
+              width: '90%',
+              maxHeight: '80vh',
+              overflow: 'auto'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0 }}>Certificate Preview</h3>
+                <button 
+                  onClick={() => setShowPreview(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '24px',
+                    cursor: 'pointer',
+                    color: '#6c757d'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
               
-              <textarea
-                placeholder="Add remarks (optional)"
-                value={remarks[cert.id] || ''}
-                onChange={(e) => handleRemarkChange(cert.id, e.target.value)}
-                rows="2"
-              />
+              <div style={{ marginBottom: '20px' }}>
+                <h4>{previewCert.certificateName}</h4>
+                <p><strong>Student:</strong> {previewCert.studentName} ({previewCert.regNo})</p>
+                <p><strong>Organization:</strong> {previewCert.organization}</p>
+                <p><strong>Issue Date:</strong> {previewCert.issueDate}</p>
+                <p><strong>Category:</strong> {previewCert.category}</p>
+              </div>
               
-              {cert.status === 'pending' && (
-                <div className="approval-buttons">
+              <div style={{ marginBottom: '20px', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '4px', textAlign: 'center' }}>
+                <FileText size={48} style={{ color: '#6c757d', marginBottom: '10px' }} />
+                <p style={{ margin: 0, color: '#6c757d' }}>Certificate preview would appear here</p>
+                <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#6c757d' }}>PDF/Image viewer integration needed</p>
+              </div>
+              
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500' }}>Remarks:</label>
+                <textarea
+                  placeholder="Add your remarks here..."
+                  value={remarks[previewCert.id] || ''}
+                  onChange={(e) => handleRemarkChange(previewCert.id, e.target.value)}
+                  rows="3"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+              
+              {previewCert.status === 'pending' && (
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                   <button 
-                    className="approve-btn"
-                    onClick={() => handleApproval(cert.id, 'approved')}
+                    onClick={() => {
+                      handleApproval(previewCert.id, 'approved');
+                      setShowPreview(false);
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
                   >
-                    <Check size={16} /> Approve
+                    <Check size={16} /> Approve Certificate
                   </button>
                   <button 
-                    className="reject-btn"
-                    onClick={() => handleApproval(cert.id, 'rejected')}
+                    onClick={() => {
+                      handleApproval(previewCert.id, 'rejected');
+                      setShowPreview(false);
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
                   >
-                    <X size={16} /> Reject
+                    <X size={16} /> Reject Certificate
                   </button>
                 </div>
               )}
             </div>
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }
