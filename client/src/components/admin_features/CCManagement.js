@@ -58,6 +58,10 @@ function CCManagement({ setCurrentView, setMessage }) {
         return;
       }
       
+      // Convert Roman numeral to numeric year
+      const romanToNumber = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+      const numericYear = romanToNumber[formData.year] || formData.year;
+      
       const response = await fetch('http://localhost:5000/api/cc-assignments', {
         method: 'POST',
         headers: {
@@ -68,7 +72,7 @@ function CCManagement({ setCurrentView, setMessage }) {
           staffId: formData.staffId,
           staffName: staff.name,
           department: formData.department,
-          year: formData.year,
+          year: numericYear,
           semester: formData.semester
         })
       });
@@ -97,6 +101,9 @@ function CCManagement({ setCurrentView, setMessage }) {
         <h2>CC Management</h2>
         <button className="add-btn" onClick={() => setShowForm(!showForm)}>
           + Assign CC
+        </button>
+        <button onClick={fetchCoordinators} style={{ marginLeft: '10px', padding: '8px 16px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+          Refresh
         </button>
       </div>
 
@@ -200,40 +207,42 @@ function CCManagement({ setCurrentView, setMessage }) {
       )}
 
       <div className="coordinators-table">
-        <table>
+        <h3>Current CC Assignments ({coordinators.length})</h3>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
           <thead>
-            <tr>
-              <th>Staff</th>
-              <th>Batch</th>
-              <th>Dept</th>
-              <th>Year</th>
-              <th>Semester</th>
-              <th>Actions</th>
+            <tr style={{ backgroundColor: '#f8f9fa' }}>
+              <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>Staff Name</th>
+              <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>Department</th>
+              <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>Year</th>
+              <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>Semester</th>
+              <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {coordinators.map(coordinator => (
               <tr key={coordinator.id}>
-                <td>{coordinator.staff_name}</td>
-                <td>{coordinator.department}-{coordinator.year}-S{coordinator.semester}</td>
-                <td>{coordinator.department}</td>
-                <td>{coordinator.year}</td>
-                <td>{coordinator.semester}</td>
-                <td>
-                  <button className="delete-btn" onClick={async () => {
-                    try {
-                      const response = await fetch(`http://localhost:5000/api/cc-assignments/${coordinator.id}`, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                      });
-                      if (response.ok) {
-                        fetchCoordinators();
-                        setMessage('CC removed successfully!');
+                <td style={{ padding: '12px', border: '1px solid #ddd' }}>{coordinator.staff_name}</td>
+                <td style={{ padding: '12px', border: '1px solid #ddd' }}>{coordinator.department}</td>
+                <td style={{ padding: '12px', border: '1px solid #ddd' }}>{coordinator.year}</td>
+                <td style={{ padding: '12px', border: '1px solid #ddd' }}>{coordinator.semester}</td>
+                <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`http://localhost:5000/api/cc-assignments/${coordinator.id}`, {
+                          method: 'DELETE',
+                          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                        });
+                        if (response.ok) {
+                          fetchCoordinators();
+                          setMessage('CC removed successfully!');
+                        }
+                      } catch (error) {
+                        setMessage('Error removing CC');
                       }
-                    } catch (error) {
-                      setMessage('Error removing CC');
-                    }
-                  }}>
+                    }}
+                    style={{ padding: '8px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
                     <Trash2 size={16} />
                   </button>
                 </td>
@@ -241,6 +250,9 @@ function CCManagement({ setCurrentView, setMessage }) {
             ))}
           </tbody>
         </table>
+        {coordinators.length === 0 && (
+          <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No CC assignments found</p>
+        )}
       </div>
     </div>
   );

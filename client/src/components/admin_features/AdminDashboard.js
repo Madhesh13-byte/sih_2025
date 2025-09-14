@@ -63,19 +63,38 @@ function AdminDashboard({ user, logout }) {
   };
   
   return (
-    <div className="dashboard">
-      <nav className="navbar">
-        <h1>Admin Dashboard</h1>
+    <div className="dashboard-enhanced">
+      <nav className="navbar-enhanced">
+        <div className="nav-brand">
+          <div className="brand-icon">
+            <Settings size={28} />
+          </div>
+          <div className="brand-text">
+            <h1>Admin Dashboard</h1>
+            <span>Smart Student Hub</span>
+          </div>
+        </div>
         <div className="nav-right">
-          <span className="welcome-text">Welcome, {user?.name}</span>
-          <button className="logout-btn" onClick={logout}>Logout</button>
+          <div className="user-info">
+            <div className="user-avatar">
+              {user?.name?.charAt(0)}
+            </div>
+            <div className="user-details">
+              <span className="user-name">{user?.name}</span>
+              <span className="user-role">Administrator</span>
+            </div>
+          </div>
+          <button className="logout-btn-enhanced" onClick={logout}>Logout</button>
         </div>
       </nav>
       
-      <div className="content">
+      <div className="content-enhanced">
         {message && (
-          <div className={`message ${message.includes('successfully') || message.includes('✅') ? 'success' : 'error'}`}>
-            {message}
+          <div className={`message-enhanced ${message.includes('successfully') || message.includes('✅') ? 'success' : 'error'}`}>
+            <div className="message-content">
+              {message.includes('successfully') || message.includes('✅') ? '✅' : '❌'}
+              <span>{message}</span>
+            </div>
           </div>
         )}
         
@@ -139,70 +158,82 @@ function AdminDashboard({ user, logout }) {
 export default AdminDashboard;
 function MainAdminView({ setCurrentView }) {
   return (
-    <div className="admin-main">
-      <h2>Admin Control Panel</h2>
-      <div className="admin-sections">
-        <div className="section-group">
-          <h3>Account Management</h3>
-          <div className="admin-actions">
-            <button className="admin-btn create-student" onClick={() => setCurrentView('create-student')}>
-              <GraduationCap />
-              <span>Create Student Account</span>
+    <div className="admin-main-enhanced">
+      <div className="admin-header">
+        <h1>Admin Control Panel</h1>
+        <p>Manage your institution's academic and administrative operations</p>
+      </div>
+      
+      <div className="admin-grid">
+        <div className="section-card account-section">
+          <div className="section-header">
+            <div className="section-icon account-icon">
+              <Users size={24} />
+            </div>
+            <h3>Account Management</h3>
+          </div>
+          <div className="card-actions">
+            <button className="action-card student-card" onClick={() => setCurrentView('create-student')}>
+              <GraduationCap size={20} />
+              <span>Create Student</span>
             </button>
-            
-            <button className="admin-btn create-staff" onClick={() => setCurrentView('create-staff')}>
-              <Users />
-              <span>Create Staff Account</span>
+            <button className="action-card staff-card" onClick={() => setCurrentView('create-staff')}>
+              <Users size={20} />
+              <span>Create Staff</span>
             </button>
-            
-            <button className="admin-btn view-accounts" onClick={() => setCurrentView('view')}>
-              <Eye />
-              <span>View All Accounts</span>
+            <button className="action-card view-card" onClick={() => setCurrentView('view')}>
+              <Eye size={20} />
+              <span>View Accounts</span>
             </button>
           </div>
         </div>
         
-        <div className="section-group">
-          <h3>Academic Management</h3>
-          <div className="admin-actions">
-            <button className="admin-btn subjects" onClick={() => setCurrentView('subjects')}>
-              <BookOpen />
-              <span>Subject Management</span>
+        <div className="section-card academic-section">
+          <div className="section-header">
+            <div className="section-icon academic-icon">
+              <BookOpen size={24} />
+            </div>
+            <h3>Academic Management</h3>
+          </div>
+          <div className="card-actions">
+            <button className="action-card subjects-card" onClick={() => setCurrentView('subjects')}>
+              <BookOpen size={20} />
+              <span>Subjects</span>
             </button>
-            
-            <button className="admin-btn assignments" onClick={() => setCurrentView('assignments')}>
-              <Settings />
+            <button className="action-card assignments-card" onClick={() => setCurrentView('assignments')}>
+              <Settings size={20} />
               <span>Staff Assignments</span>
             </button>
-            
-            <button className="admin-btn coordinators" onClick={() => setCurrentView('coordinators')}>
-              <UserCheck />
+            <button className="action-card cc-card" onClick={() => setCurrentView('coordinators')}>
+              <UserCheck size={20} />
               <span>CC Management</span>
             </button>
-            
-            <button className="admin-btn classes" onClick={() => setCurrentView('classes')}>
-              <Users />
-              <span>Class Management</span>
+            <button className="action-card classes-card" onClick={() => setCurrentView('classes')}>
+              <Building2 size={20} />
+              <span>Classes</span>
             </button>
-            
-            <button className="admin-btn timetables" onClick={() => setCurrentView('timetables')}>
-              <Calendar />
-              <span>Timetable Management</span>
+            <button className="action-card timetable-card" onClick={() => setCurrentView('timetables')}>
+              <Calendar size={20} />
+              <span>Timetables</span>
             </button>
-            
-            <button className="admin-btn student-results" onClick={() => setCurrentView('student-results')}>
-              <BarChart3 />
-              <span>Student Results</span>
+            <button className="action-card results-card" onClick={() => setCurrentView('student-results')}>
+              <BarChart3 size={20} />
+              <span>Results</span>
             </button>
           </div>
         </div>
         
-        <div className="section-group">
-          <h3>System</h3>
-          <div className="admin-actions">
-            <button className="admin-btn settings" onClick={() => setCurrentView('settings')}>
-              <Settings />
-              <span>System Settings</span>
+        <div className="section-card system-section">
+          <div className="section-header">
+            <div className="section-icon system-icon">
+              <Settings size={24} />
+            </div>
+            <h3>System Settings</h3>
+          </div>
+          <div className="card-actions">
+            <button className="action-card settings-card" onClick={() => setCurrentView('settings')}>
+              <Settings size={20} />
+              <span>System Config</span>
             </button>
           </div>
         </div>

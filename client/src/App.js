@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import StudentDashboard from './components/student/StudentDashboard';
 import AdminDashboard from './components/admin_features/AdminDashboard';
-import TeacherDashboard from './components/TeacherDashboard';
+import TeacherDashboard from './components/teacher/TeacherDashboard';
 import { LoginPage, AdminLogin } from './components/Login';
 import './App.css';
 

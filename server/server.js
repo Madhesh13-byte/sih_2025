@@ -152,6 +152,18 @@ db.serialize(() => {
     UNIQUE(student_id, subject_code, date, period_number)
   )`);
 
+  // Create certificates table if it doesn't exist
+  db.run(`CREATE TABLE IF NOT EXISTS certificates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    certificate_name TEXT NOT NULL,
+    certificate_file TEXT,
+    status TEXT DEFAULT 'pending',
+    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    approved_by INTEGER,
+    approved_date DATETIME
+  )`);
+
   // Insert default settings
   db.run(`INSERT OR IGNORE INTO admin_settings (setting_key, setting_value) VALUES (?, ?)`,
     ['auto_create_classes', 'true']);
@@ -745,8 +757,12 @@ app.get('/api/classes/:class_id/details', authenticateToken, (req, res) => {
         db.all('SELECT sa.*, s.subject_name as full_subject_name FROM staff_assignments sa LEFT JOIN subjects s ON (sa.subject_code = s.subject_code AND sa.department = s.department AND sa.year = s.year) WHERE sa.department = ? AND sa.year = ? AND sa.section = ?',
           [classInfo.department, classInfo.year, classInfo.section], (err, assignments) => {
             if (err) return res.status(500).json({ error: 'Database error' });            // Get CC assignments for this class based on department and year
+            // Convert Roman numeral to number for CC assignment matching
+            const romanToNumber = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+            const numericYear = romanToNumber[classInfo.year] || classInfo.year;
+            
             db.all('SELECT * FROM cc_assignments WHERE department = ? AND year = ?',
-              [classInfo.department, classInfo.year], (err, ccAssignments) => {
+              [classInfo.department, numericYear], (err, ccAssignments) => {
                 if (err) return res.status(500).json({ error: 'Database error' });
                 
                 res.json({
@@ -2646,9 +2662,14 @@ app.delete('/api/debug/clear-all-results', authenticateToken, requireAdmin, (req
   });
 });
 
-// Generate PDF using Puppeteer
+// Generate Official Portfolio PDF
 app.post('/api/generate-portfolio-pdf', authenticateToken, async (req, res) => {
-  console.log('PDF generation request received');
+  console.log('Official PDF generation request received');
+  
+  if (!puppeteer) {
+    return res.status(500).json({ error: 'Puppeteer not available' });
+  }
+  
   const { studentData, semesterResults, achievements } = req.body;
   
   if (!studentData || !semesterResults || !achievements) {
@@ -2783,12 +2804,18 @@ app.post('/api/generate-portfolio-pdf', authenticateToken, async (req, res) => {
     console.log('Launching Puppeteer...');
     const browser = await puppeteer.launch({ 
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      timeout: 60000
     });
     
     const page = await browser.newPage();
+    page.setDefaultTimeout(60000);
+    
     console.log('Setting content...');
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    await page.setContent(htmlContent, { 
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
     
     console.log('Generating PDF...');
     const pdf = await page.pdf({
@@ -3049,6 +3076,87 @@ app.post('/api/generate-beginner-portfolio-pdf', authenticateToken, async (req, 
     console.error('Beginner PDF generation error:', error);
     res.status(500).json({ error: 'PDF generation failed' });
   }
+});
+
+// Get certificates for CC staff to approve
+app.get('/api/cc-certificates', authenticateToken, (req, res) => {
+  // Get staff info first
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err || !staffInfo) {
+      return res.status(500).json({ error: 'Staff not found' });
+    }
+    
+    // Check if this staff is assigned as CC
+    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      if (!ccAssignment) {
+        return res.status(403).json({ error: 'Access denied - Not a CC' });
+      }
+      
+      // Get certificates from students in CC's department and year
+      db.all(`SELECT c.*, u.name as studentName, u.register_no as regNo 
+              FROM certificates c 
+              JOIN users u ON c.student_id = u.id 
+              WHERE u.department = ? 
+              ORDER BY c.upload_date DESC`,
+        [ccAssignment.department], (err, certificates) => {
+          if (err) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          
+          // Format certificates for display
+          const formattedCerts = certificates.map(cert => ({
+            id: cert.id,
+            studentName: cert.studentName,
+            regNo: cert.regNo,
+            certificateName: cert.certificate_name,
+            organization: 'Various',
+            issueDate: cert.upload_date,
+            category: 'General',
+            status: cert.status,
+            uploadDate: cert.upload_date,
+            fileUrl: cert.certificate_file || '#'
+          }));
+          
+          res.json({ certificates: formattedCerts });
+        }
+      );
+    });
+  });
+});
+
+// Approve/Reject certificate
+app.put('/api/certificates/:id/approve', authenticateToken, (req, res) => {
+  const { status, remarks } = req.body;
+  const certId = req.params.id;
+  
+  // Get staff info
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err || !staffInfo) {
+      return res.status(500).json({ error: 'Staff not found' });
+    }
+    
+    // Check if staff is CC
+    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
+      if (err || !ccAssignment) {
+        return res.status(403).json({ error: 'Access denied - Not a CC' });
+      }
+      
+      // Update certificate status
+      db.run(`UPDATE certificates SET status = ?, approved_by = ?, approved_date = datetime('now') WHERE id = ?`,
+        [status, req.user.id, certId], function(err) {
+          if (err) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          
+          res.json({ message: `Certificate ${status} successfully` });
+        }
+      );
+    });
+  });
 });
 
 app.listen(PORT, () => {

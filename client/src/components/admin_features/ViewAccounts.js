@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar, Filter, Hash, Building2 } from 'lucide-react';
-import ClassAssignment from './ClassAssignment';
 import './styles/ViewAccounts.css';
 
 function ViewAccounts({ accounts, setCurrentView, setMessage, fetchAccounts }) {
@@ -330,7 +329,7 @@ function ViewAccounts({ accounts, setCurrentView, setMessage, fetchAccounts }) {
                         );
 
                         await Promise.all(promises);
-                        setMessage(`Successfully assigned ${selectedStudents.length} students to class`);
+                        setMessage(`✅ Successfully assigned ${selectedStudents.length} students to class`);
                         setShowClassAssignment(false);
                         setSelectedStudents([]);
                         fetchAccounts();
@@ -424,9 +423,7 @@ function ViewAccounts({ accounts, setCurrentView, setMessage, fetchAccounts }) {
                     ) : (
                       <button className="reset-btn" onClick={() => setResetId(account.id)}>Reset Password</button>
                     )}
-                    {account.role === 'student' && (
-                      <ClassAssignment studentId={account.id} currentClassId={account.class_id} fetchAccounts={fetchAccounts} setMessage={setMessage} />
-                    )}
+
                   </div>
                 </td>
               </tr>
