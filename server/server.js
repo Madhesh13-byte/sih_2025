@@ -3078,6 +3078,52 @@ app.post('/api/generate-beginner-portfolio-pdf', authenticateToken, async (req, 
   }
 });
 
+// Get students with certificate statistics for CC staff
+app.get('/api/cc-students-certificates', authenticateToken, (req, res) => {
+  // Get staff info first
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err || !staffInfo) {
+      return res.status(500).json({ error: 'Staff not found' });
+    }
+    
+    // Check if this staff is assigned as CC
+    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      if (!ccAssignment) {
+        return res.status(403).json({ error: 'Access denied - Not a CC' });
+      }
+      
+      // Get students from CC's department with certificate counts
+      db.all(`SELECT u.id, u.name, u.register_no, u.department, 
+                     CASE 
+                       WHEN u.current_semester <= 2 THEN '1'
+                       WHEN u.current_semester <= 4 THEN '2'
+                       WHEN u.current_semester <= 6 THEN '3'
+                       ELSE '4'
+                     END as year,
+                     COUNT(CASE WHEN c.status = 'approved' THEN 1 END) as approvedCertificates,
+                     COUNT(CASE WHEN c.status = 'pending' THEN 1 END) as pendingCertificates,
+                     COUNT(c.id) as totalCertificates
+              FROM users u 
+              LEFT JOIN certificates c ON u.id = c.student_id 
+              WHERE u.role = 'student' AND u.department = ?
+              GROUP BY u.id, u.name, u.register_no, u.department
+              ORDER BY u.register_no`,
+        [ccAssignment.department], (err, students) => {
+          if (err) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          
+          res.json({ students });
+        }
+      );
+    });
+  });
+});
+
 // Get certificates for CC staff to approve
 app.get('/api/cc-certificates', authenticateToken, (req, res) => {
   // Get staff info first
@@ -3122,6 +3168,39 @@ app.get('/api/cc-certificates', authenticateToken, (req, res) => {
           }));
           
           res.json({ certificates: formattedCerts });
+        }
+      );
+    });
+  });
+});
+
+// Get certificates for a specific student
+app.get('/api/student-certificates/:studentId', authenticateToken, (req, res) => {
+  const { studentId } = req.params;
+  
+  // Get staff info
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err || !staffInfo) {
+      return res.status(500).json({ error: 'Staff not found' });
+    }
+    
+    // Check if staff is CC
+    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
+      if (err || !ccAssignment) {
+        return res.status(403).json({ error: 'Access denied - Not a CC' });
+      }
+      
+      // Get certificates for this student
+      db.all(`SELECT c.* FROM certificates c 
+              JOIN users u ON c.student_id = u.id 
+              WHERE c.student_id = ? AND u.department = ?
+              ORDER BY c.upload_date DESC`,
+        [studentId, ccAssignment.department], (err, certificates) => {
+          if (err) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          
+          res.json({ certificates });
         }
       );
     });
