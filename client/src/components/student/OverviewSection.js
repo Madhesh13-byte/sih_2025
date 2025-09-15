@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, Award, Target, Upload, BarChart3 } from 'lucide-react';
+import { AnimatedProgressBar, AnimatedCircularProgress, AnimatedBarChart } from '../AnimatedCharts';
+import '../AnimatedCharts.css';
 import './StudentDashboard.css';
 function OverviewSection({ user }) {
   const [overallAttendance, setOverallAttendance] = useState(0);
@@ -45,33 +47,47 @@ function OverviewSection({ user }) {
       <h2>Dashboard Overview</h2>
       
       <div className="stats-grid">
-        <div className="stat-card">
+        <div className="stat-card animated-card">
           <div className="stat-icon academic">
             <TrendingUp size={24} />
           </div>
           <div className="stat-content">
             <h3>{cgpa > 0 ? cgpa : '--'}</h3>
             <p>CGPA</p>
+            {cgpa > 0 && (
+              <AnimatedProgressBar 
+                percentage={(cgpa / 10) * 100}
+                label=""
+                color={cgpa >= 8 ? '#10b981' : cgpa >= 6 ? '#f59e0b' : '#ef4444'}
+                delay={0}
+              />
+            )}
             <span className={`stat-trend ${cgpa >= 8 ? 'positive' : cgpa >= 6 ? 'neutral' : 'negative'}`}>
               {cgpa > 0 ? (cgpa >= 8 ? 'Excellent' : cgpa >= 6 ? 'Good' : 'Needs improvement') : 'Not available yet'}
             </span>
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card animated-card">
           <div className="stat-icon attendance">
             <Calendar size={24} />
           </div>
           <div className="stat-content">
             <h3>{overallAttendance}%</h3>
             <p>Overall Attendance</p>
+            <AnimatedProgressBar 
+              percentage={overallAttendance}
+              label=""
+              color={overallAttendance >= 75 ? '#10b981' : '#ef4444'}
+              delay={200}
+            />
             <span className={`stat-trend ${overallAttendance >= 75 ? 'positive' : 'negative'}`}>
               {overallAttendance >= 75 ? 'Good standing' : 'Below required'}
             </span>
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card animated-card">
           <div className="stat-icon certificates">
             <Award size={24} />
           </div>
@@ -82,7 +98,7 @@ function OverviewSection({ user }) {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card animated-card">
           <div className="stat-icon rank">
             <Target size={24} />
           </div>
@@ -92,6 +108,20 @@ function OverviewSection({ user }) {
             <span className="stat-trend neutral">Not available yet</span>
           </div>
         </div>
+      </div>
+
+      {/* Performance Chart */}
+      <div className="performance-chart">
+        <h3>Performance Overview</h3>
+        <AnimatedBarChart 
+          data={[
+            { label: 'Attendance', value: overallAttendance, color: overallAttendance >= 75 ? '#10b981' : '#ef4444' },
+            { label: 'CGPA', value: cgpa > 0 ? (cgpa / 10) * 100 : 0, color: cgpa >= 8 ? '#10b981' : cgpa >= 6 ? '#f59e0b' : '#ef4444' },
+            { label: 'Assignments', value: 85, color: '#6366f1' },
+            { label: 'Projects', value: 78, color: '#8b5cf6' }
+          ]}
+          height={200}
+        />
       </div>
 
       <div className="quick-actions">

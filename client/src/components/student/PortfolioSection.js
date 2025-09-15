@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { FileText, Star, Award, Download } from 'lucide-react';
 import BeginnerPortfolio from './portfolio_temp/BeginnerPortfolio';
 import IntermediatePortfolio from './portfolio_temp/IntermediatePortfolio';
+import AdvancePortfolio from './portfolio_temp/AdvancePortfolio';
 
 const PortfolioSection = ({ user }) => {
   const [activePortfolio, setActivePortfolio] = useState('beginner');
@@ -24,19 +25,7 @@ const PortfolioSection = ({ user }) => {
       case 'intermediate':
         return <IntermediatePortfolio user={user} isModal={false} onDownload={handleDownloadFunction} />;
       case 'advanced':
-        return (
-          <div style={{
-            padding: '60px 20px',
-            textAlign: 'center',
-            background: 'linear-gradient(135deg, #fef3c7 0%, #f59e0b 100%)',
-            borderRadius: '12px',
-            margin: '20px'
-          }}>
-            <Award size={64} style={{ color: '#7c2d12', marginBottom: '20px' }} />
-            <h2 style={{ color: '#7c2d12', marginBottom: '10px' }}>Advanced Portfolio</h2>
-            <p style={{ color: '#92400e' }}>Coming Soon - Premium Advanced Template</p>
-          </div>
-        );
+        return <AdvancePortfolio user={user} isModal={false} onDownload={handleDownloadFunction} />;
       default:
         return null;
     }
@@ -136,7 +125,7 @@ const PortfolioSection = ({ user }) => {
       </div>
 
       {/* Centralized Download Button */}
-      {downloadFunction && activePortfolio !== 'advanced' && (
+      {downloadFunction && (
         <div style={{
           position: 'fixed',
           bottom: '20px',
