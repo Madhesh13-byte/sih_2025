@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, BookOpen, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Upload, RefreshCw, Trash2 } from 'lucide-react';
 import './styles/StudentAccountForm.css';
 
 function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
@@ -173,7 +173,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
         </button>
         <h2>Create Student Account</h2>
         <button className="import-btn" onClick={() => setShowImport(!showImport)}>
-          <BookOpen size={16} /> Import CSV
+          <Upload size={16} /> Import CSV
         </button>
       </div>
       
@@ -202,7 +202,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
               onClick={handleCsvImport}
               disabled={!csvFile || isImporting}
             >
-              {isImporting ? 'Importing...' : <><RefreshCw size={16} /> Import</>}
+              {isImporting ? 'Importing...' : <><Upload size={16} /> Import</>}
             </button>
           </div>
           
@@ -213,6 +213,13 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
           </div>
         </div>
       )}
+      
+      {/* Step Indicator */}
+      <div className="step-indicator">
+        <div className={`step ${step >= 1 ? 'active' : ''}`}>1</div>
+        <div className={`step-connector ${step >= 2 ? 'active' : ''}`}></div>
+        <div className={`step ${step >= 2 ? 'active' : ''}`}>2</div>
+      </div>
       
       {step === 1 ? (
         <form onSubmit={handleBatchSubmit} className="admin-form">
@@ -335,15 +342,8 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
           
           <div className="form-actions">
             <button type="button" className="cancel-btn" onClick={() => setStep(1)}>Back</button>
-            <button type="submit" className={`submit-btn ${isLoading ? 'loading' : ''}`} disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <div className="spinner"></div>
-                  Creating...
-                </>
-              ) : (
-                'Create All Students'
-              )}
+            <button type="submit" className="submit-btn" disabled={isLoading}>
+              {isLoading ? 'Creating...' : 'Create All Students'}
             </button>
           </div>
         </form>

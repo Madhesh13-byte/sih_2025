@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, TrendingUp, Award, Target, Upload, BarChart3 } from 'lucide-react';
+import { AnimatedProgressBar, AnimatedCircularProgress, AnimatedBarChart } from '../AnimatedCharts';
+import '../AnimatedCharts.css';
 import './StudentDashboard.css';
 function AttendanceSection({ user }) {
   const [attendanceData, setAttendanceData] = useState([]);
@@ -65,10 +67,11 @@ function AttendanceSection({ user }) {
       
       <div className="attendance-overview">
         <div className="overall-attendance">
-          <div className="attendance-circle">
-            <span className="percentage">{overallStats.percentage}%</span>
-            <span className="label">Overall</span>
-          </div>
+          <AnimatedCircularProgress 
+            percentage={overallStats.percentage}
+            size={140}
+            color={overallStats.percentage >= 75 ? '#10b981' : overallStats.percentage >= 65 ? '#f59e0b' : '#ef4444'}
+          />
           <div className="attendance-info">
             <p>Total Classes: {overallStats.total}</p>
             <p>Attended: {overallStats.present}</p>
@@ -124,10 +127,12 @@ function AttendanceSection({ user }) {
                   <span className="attendance-ratio">{subject.present}/{subject.total}</span>
                 </div>
                 <div className="attendance-bar">
-                  <div 
-                    className={`bar-fill ${getAttendanceStatus(subject.percentage)}`}
-                    style={{ width: `${subject.percentage}%` }}
-                  ></div>
+                  <AnimatedProgressBar 
+                    percentage={subject.percentage}
+                    label=""
+                    color={subject.percentage >= 75 ? '#10b981' : subject.percentage >= 65 ? '#f59e0b' : '#ef4444'}
+                    delay={index * 100}
+                  />
                 </div>
                 <span className={`percentage ${getAttendanceStatus(subject.percentage)}`}>
                   {subject.percentage}%

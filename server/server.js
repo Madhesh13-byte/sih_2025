@@ -2979,6 +2979,124 @@ app.post('/api/generate-intermediate-portfolio-pdf', authenticateToken, async (r
   }
 });
 
+// Generate Advanced Portfolio PDF
+app.post('/api/generate-advanced-portfolio-pdf', authenticateToken, async (req, res) => {
+  if (!puppeteer) {
+    return res.status(500).json({ error: 'Puppeteer not available' });
+  }
+  
+  const { studentData, certificates } = req.body;
+  
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: A4; margin: 0.5in; }
+    body { font-family: 'Inter', sans-serif; margin: 0; color: #333; background: white; }
+    .header { background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%); padding: 40px; color: white; text-align: center; }
+    h1 { margin: 0; font-size: 36px; font-weight: 900; }
+    .content { padding: 30px; }
+    .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
+    .info-card { padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; }
+    .achievements { margin-bottom: 30px; }
+    .achievement-item { padding: 20px; margin-bottom: 15px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .badges { text-align: center; padding: 30px; background: #f8fafc; }
+    .badge { display: inline-block; padding: 8px 16px; margin: 5px; background: #e0e7ff; color: #3730a3; border-radius: 20px; font-weight: 600; }
+    .footer { text-align: center; padding: 20px; background: #f8fafc; color: #64748b; }
+    h2 { color: #1e293b; font-size: 24px; margin-bottom: 20px; }
+    h3 { color: #475569; font-size: 14px; text-transform: uppercase; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${studentData.name}</h1>
+    <p style="font-size: 18px; margin: 10px 0 0 0;">Information Technology Student</p>
+  </div>
+  
+  <div class="content">
+    <h2>Academic Information</h2>
+    <div class="info-grid">
+      <div class="info-card">
+        <h3>Registration</h3>
+        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.regNo}</p>
+      </div>
+      <div class="info-card">
+        <h3>Department</h3>
+        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.department}</p>
+      </div>
+      <div class="info-card">
+        <h3>Academic Year</h3>
+        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.year}</p>
+      </div>
+      <div class="info-card">
+        <h3>Level</h3>
+        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.level}</p>
+      </div>
+    </div>
+    
+    <h2>Key Achievements</h2>
+    <div class="achievements">
+      ${certificates.map(cert => `
+        <div class="achievement-item">
+          <h3 style="color: #1e293b; font-size: 16px; margin: 0 0 8px 0;">${cert.certificate_name}</h3>
+          <p style="margin: 0; color: #64748b;">Uploaded: ${new Date(cert.upload_date).toLocaleDateString()}</p>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  
+  <div class="badges">
+    <h2>Badges & Level</h2>
+    <div>
+      <span class="badge">Innovator (${studentData.totalPoints} Points)</span>
+      <span class="badge">Leader</span>
+      <span class="badge">Mentor</span>
+    </div>
+    <div style="margin-top: 20px; padding: 20px; background: white; border-radius: 12px; display: inline-block;">
+      <h3 style="margin: 0 0 8px 0;">Current Level: ${studentData.level}</h3>
+      <p style="margin: 0;">Total Points: ${studentData.totalPoints}</p>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <p>🎓 Digital Portfolio • Verified & Generated via Smart Student Hub</p>
+    <p style="font-size: 12px; margin-top: 8px;">Last Updated: ${new Date().toLocaleDateString()}</p>
+  </div>
+</body>
+</html>`;
+  
+  try {
+    const browser = await puppeteer.launch({ 
+      headless: true, 
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      timeout: 60000
+    });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(60000);
+    
+    await page.setContent(htmlContent, { 
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
+    
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
+    });
+    
+    await browser.close();
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${studentData.name.replace(/\s+/g, '_')}_Advanced_Portfolio.pdf"`);
+    res.end(pdf, 'binary');
+  } catch (error) {
+    console.error('Advanced PDF generation error:', error);
+    res.status(500).json({ error: 'PDF generation failed' });
+  }
+});
+
 // Generate Beginner Portfolio PDF
 app.post('/api/generate-beginner-portfolio-pdf', authenticateToken, async (req, res) => {
   const { studentData, certificates } = req.body;
@@ -3078,6 +3196,52 @@ app.post('/api/generate-beginner-portfolio-pdf', authenticateToken, async (req, 
   }
 });
 
+// Get students with certificate statistics for CC staff
+app.get('/api/cc-students-certificates', authenticateToken, (req, res) => {
+  // Get staff info first
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err || !staffInfo) {
+      return res.status(500).json({ error: 'Staff not found' });
+    }
+    
+    // Check if this staff is assigned as CC
+    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      
+      if (!ccAssignment) {
+        return res.status(403).json({ error: 'Access denied - Not a CC' });
+      }
+      
+      // Get students from CC's department with certificate counts
+      db.all(`SELECT u.id, u.name, u.register_no, u.department, 
+                     CASE 
+                       WHEN u.current_semester <= 2 THEN '1'
+                       WHEN u.current_semester <= 4 THEN '2'
+                       WHEN u.current_semester <= 6 THEN '3'
+                       ELSE '4'
+                     END as year,
+                     COUNT(CASE WHEN c.status = 'approved' THEN 1 END) as approvedCertificates,
+                     COUNT(CASE WHEN c.status = 'pending' THEN 1 END) as pendingCertificates,
+                     COUNT(c.id) as totalCertificates
+              FROM users u 
+              LEFT JOIN certificates c ON u.id = c.student_id 
+              WHERE u.role = 'student' AND u.department = ?
+              GROUP BY u.id, u.name, u.register_no, u.department
+              ORDER BY u.register_no`,
+        [ccAssignment.department], (err, students) => {
+          if (err) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          
+          res.json({ students });
+        }
+      );
+    });
+  });
+});
+
 // Get certificates for CC staff to approve
 app.get('/api/cc-certificates', authenticateToken, (req, res) => {
   // Get staff info first
@@ -3122,6 +3286,39 @@ app.get('/api/cc-certificates', authenticateToken, (req, res) => {
           }));
           
           res.json({ certificates: formattedCerts });
+        }
+      );
+    });
+  });
+});
+
+// Get certificates for a specific student
+app.get('/api/student-certificates/:studentId', authenticateToken, (req, res) => {
+  const { studentId } = req.params;
+  
+  // Get staff info
+  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
+    if (err || !staffInfo) {
+      return res.status(500).json({ error: 'Staff not found' });
+    }
+    
+    // Check if staff is CC
+    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
+      if (err || !ccAssignment) {
+        return res.status(403).json({ error: 'Access denied - Not a CC' });
+      }
+      
+      // Get certificates for this student
+      db.all(`SELECT c.* FROM certificates c 
+              JOIN users u ON c.student_id = u.id 
+              WHERE c.student_id = ? AND u.department = ?
+              ORDER BY c.upload_date DESC`,
+        [studentId, ccAssignment.department], (err, certificates) => {
+          if (err) {
+            return res.status(500).json({ error: 'Database error' });
+          }
+          
+          res.json({ certificates });
         }
       );
     });

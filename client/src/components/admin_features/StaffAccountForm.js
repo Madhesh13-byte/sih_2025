@@ -280,15 +280,8 @@ function CreateStaffForm({ setCurrentView, setMessage }) {
           
           <div className="form-actions">
             <button type="button" className="cancel-btn" onClick={() => setStep(1)}>Back</button>
-            <button type="submit" className={`submit-btn ${isLoading ? 'loading' : ''}`} disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <div className="spinner"></div>
-                  Creating...
-                </>
-              ) : (
-                'Create All Staff'
-              )}
+            <button type="submit" className="submit-btn" disabled={isLoading}>
+              {isLoading ? 'Creating...' : 'Create All Staff'}
             </button>
           </div>
         </form>

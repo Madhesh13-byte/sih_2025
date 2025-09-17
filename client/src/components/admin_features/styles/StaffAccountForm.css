@@ -149,15 +149,7 @@
   cursor: not-allowed;
 }
 
-.submit-btn.loading {
-  background: linear-gradient(135deg, #a0a0a0 0%, #808080 100%);
-  cursor: not-allowed;
-  transform: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
+
 
 /* CSV Import Styles */
 .csv-import-section {
