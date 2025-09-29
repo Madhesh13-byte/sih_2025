@@ -293,6 +293,11 @@
   color: white;
 }
 
+.reports-icon {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+}
+
 .system-icon {
   background: linear-gradient(135deg, #ed8936, #dd6b20);
   color: white;
@@ -628,7 +633,7 @@
   border-bottom: 2px solid var(--gray-200);
   position: relative;
   
-  /* &::after {
+  &::after {
     content: '';
     position: absolute;
     bottom: -2px;
@@ -637,11 +642,11 @@
     height: 2px;
     background: var(--primary);
     transition: width var(--transition-normal);
-  } */
+  }
   
-  /* &:hover::after {
+  &:hover::after {
     width: 150px;
-  } */
+  }
 }
 
 .form-header h2 {

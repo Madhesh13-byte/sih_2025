@@ -3,6 +3,8 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
+const puppeteer = require('puppeteer');
+const setupPortfolioRoutes = require('./portfolioRoutes');
 require('dotenv').config();
 
 const app = express();
@@ -37,12 +39,68 @@ const db = new Pool({
     const adminCount = await db.query('SELECT COUNT(*) as count FROM users WHERE role = $1', ['admin']);
     
     if (adminCount.rows[0].count === '0') {
-      await db.query('INSERT INTO users (register_no, password, role, name) VALUES ($1, $2, $3, $4)',
-        ['STU001', hashedPassword, 'student', 'John Student']);
+      // Create sample students
+      const students = [
+        ['STU001', 'John Student', 'Computer Science'],
+        ['STU002', 'Alice Johnson', 'Information Technology'],
+        ['STU003', 'Bob Smith', 'Electronics'],
+        ['STU004', 'Carol Davis', 'Computer Science'],
+        ['STU005', 'David Wilson', 'Information Technology'],
+        ['STU006', 'Emma Brown', 'Mechanical'],
+        ['STU007', 'Frank Miller', 'Civil'],
+        ['STU008', 'Grace Lee', 'Computer Science'],
+        ['STU009', 'Henry Taylor', 'Electronics'],
+        ['STU010', 'Ivy Chen', 'Information Technology']
+      ];
+      
+      for (const [regNo, name, dept] of students) {
+        await db.query('INSERT INTO users (register_no, password, role, name, department) VALUES ($1, $2, $3, $4, $5)',
+          [regNo, hashedPassword, 'student', name, dept]);
+      }
+      
       await db.query('INSERT INTO users (staff_id, password, role, name, department) VALUES ($1, $2, $3, $4, $5)',
         ['STF001', hashedPassword, 'staff', 'Jane Staff', 'Computer Science']);
       await db.query('INSERT INTO users (admin_id, password, role, name) VALUES ($1, $2, $3, $4)',
         ['ADM001', hashedPassword, 'admin', 'Admin User']);
+        
+      // Create certificates table and add sample certificates
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS certificates (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          certificate_name VARCHAR(255) NOT NULL,
+          upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      // Add sample certificates for some students
+      const userIds = await db.query('SELECT id FROM users WHERE role = $1 ORDER BY id', ['student']);
+      if (userIds.rows.length > 0) {
+        const certificates = [
+          'AWS Cloud Practitioner',
+          'Google Analytics Certified',
+          'Microsoft Azure Fundamentals',
+          'Python Programming Certificate',
+          'React Development Course',
+          'Data Science Fundamentals',
+          'Cybersecurity Basics',
+          'Machine Learning Certificate'
+        ];
+        
+        // Distribute certificates randomly among students
+        for (let i = 0; i < userIds.rows.length; i++) {
+          const userId = userIds.rows[i].id;
+          const certCount = Math.floor(Math.random() * 6) + 1; // 1-6 certificates per student
+          
+          for (let j = 0; j < certCount; j++) {
+            const certName = certificates[Math.floor(Math.random() * certificates.length)];
+            await db.query(
+              'INSERT INTO certificates (user_id, certificate_name) VALUES ($1, $2)',
+              [userId, `${certName} - ${j + 1}`]
+            );
+          }
+        }
+      }
     }
   } catch (error) {
     console.error('Database initialization error:', error);
@@ -890,6 +948,94 @@ app.post('/api/admin/calculate-all-gpa', authenticateToken, async (req, res) => 
     res.status(500).json({ error: 'GPA calculation failed' });
   }
 });
+
+
+
+// Get top 10 students leaderboard
+app.get('/api/students/leaderboard', authenticateToken, async (req, res) => {
+  try {
+    console.log('🏆 Fetching leaderboard data from database...');
+    
+    // Get students with their certificate counts and calculate points
+    const query = `
+      SELECT 
+        u.id as student_id,
+        u.name,
+        u.register_no,
+        u.department,
+        COUNT(c.id) as certificate_count,
+        (COUNT(c.id) * 5) as total_points
+      FROM users u
+      LEFT JOIN certificates c ON u.id = c.user_id
+      WHERE u.role = 'student'
+      GROUP BY u.id, u.name, u.register_no, u.department
+      ORDER BY total_points DESC, certificate_count DESC, u.name ASC
+      LIMIT 10
+    `;
+    
+    const result = await db.query(query);
+    console.log(`🏆 Found ${result.rows.length} students for leaderboard`);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Leaderboard fetch error:', error.message);
+    // Return empty array if certificates table doesn't exist yet
+    if (error.message.includes('relation "certificates" does not exist')) {
+      console.log('📝 Certificates table not found, returning sample data');
+      // Try to get students without certificates table
+      const studentsQuery = `
+        SELECT 
+          u.id as student_id,
+          u.name,
+          u.register_no,
+          u.department,
+          0 as certificate_count,
+          0 as total_points
+        FROM users u
+        WHERE u.role = 'student'
+        ORDER BY u.name ASC
+        LIMIT 10
+      `;
+      
+      const studentsResult = await db.query(studentsQuery);
+      return res.json(studentsResult.rows);
+    }
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Certificate upload endpoint
+app.post('/api/certificates/upload', authenticateToken, async (req, res) => {
+  try {
+    const { certificate_name } = req.body;
+    const userId = req.user.id;
+    
+    // Create certificates table if it doesn't exist
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS certificates (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        certificate_name VARCHAR(255) NOT NULL,
+        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Insert certificate record
+    const result = await db.query(
+      'INSERT INTO certificates (user_id, certificate_name) VALUES ($1, $2) RETURNING *',
+      [userId, certificate_name]
+    );
+    
+    console.log(`📜 Certificate uploaded: ${certificate_name} for user ${userId}`);
+    res.json({ message: 'Certificate uploaded successfully', certificate: result.rows[0] });
+  } catch (error) {
+    console.error('❌ Certificate upload error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Setup portfolio routes
+setupPortfolioRoutes(app, authenticateToken);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

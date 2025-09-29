@@ -1,33 +1,46 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import {
+  Trophy,
+  FileText,
+  Briefcase,
+  GraduationCap,
+  Award,
+  CheckCircle,
+  Mail,
+  Linkedin,
+  Phone,
+} from "lucide-react";
 
-const AdvancePortfolio = ({ user, isModal = false, onDownload }) => {
-  const isDarkMode = false;
+const AdvancedPortfolio = ({ user, isModal = false, onDownload }) => {
+  const [studentData] = React.useState({
+    name: 'John Doe',
+    regNo: '12345',
+    department: 'Information Technology',
+    year: '3',
+    level: 'Advanced',
+    totalPoints: 320
+  });
 
-  useEffect(() => {
-    if (onDownload) {
-      onDownload(() => handleDownloadPDF);
-    }
-  }, [onDownload]);
+  const [certificates] = React.useState([
+    { title: 'AWS Cloud Practitioner', date: 'Dec 2024' },
+    { title: 'Google Analytics Certified', date: 'Nov 2024' },
+    { title: 'Microsoft Azure Fundamentals', date: 'Oct 2024' },
+    { title: 'Python Programming Certificate', date: 'Sep 2024' }
+  ]);
 
-  const handleDownloadPDF = async () => {
+  const downloadRef = React.useRef(null);
+
+  downloadRef.current = async () => {
     try {
+      console.log('🚀 Starting PDF generation for Advanced Portfolio...');
+      
       const response = await fetch('http://localhost:5000/api/generate-advanced-portfolio-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({
-          studentData: {
-            name: user?.name || 'XXXXX',
-            regNo: user?.register_no || '12345',
-            department: user?.department || 'IT',
-            year: '3',
-            email: 'email@domain.com',
-            level: 'ADVANCED',
-            totalPoints: 320
-          }
-        })
+        body: JSON.stringify({ studentData, certificates })
       });
       
       if (response.ok) {
@@ -35,431 +48,834 @@ const AdvancePortfolio = ({ user, isModal = false, onDownload }) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${user?.name || 'Student'}_Advanced_Portfolio.pdf`;
+        a.download = `${studentData.name}_Advanced_Portfolio.pdf`;
+        document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        console.log('✅ Advanced PDF downloaded successfully!');
+      } else {
+        console.error('❌ PDF generation failed');
+        alert('PDF generation failed');
       }
     } catch (error) {
-      console.error('PDF generation error:', error);
+      console.error('💥 PDF generation error:', error);
+      alert('PDF generation failed');
     }
   };
 
-  const studentDetails = {
-    name: user?.name || "XXXXX",
-    title: "Information Technology Student",
-    regNo: user?.register_no || "12345",
-    dept: user?.department || "IT",
-    year: "3",
-    email: "email@domain.com",
-    phone: "+91 98765 43210",
-    linkedin: "linkedin.com/in/link",
-    github: "github.com/username"
-  };
-
-  const highlightSummary = [
-    { text: "Gold Medal in National Coding Contest", icon: "🏅", category: "Achievement" },
-    { text: "Research Paper in IEEE Conference", icon: "📄", category: "Research" },
-    { text: "Internship at TCS - Data Analyst", icon: "💼", category: "Experience" },
-  ];
-
-  const achievementTimeline = [
-    { 
-      year: "2023", 
-      title: "Workshop on AI",
-      description: "Workshop on AI → Certified ✅",
-      type: "achievement"
-    },
-    { 
-      year: "2024", 
-      title: "NPTEL DBMS Course",
-      description: "NPTEL DBMS Course → Completed ✅",
-      type: "achievement"
-    },
-    { 
-      year: "2025", 
-      title: "National Hackathon Winner",
-      description: "National Hackathon Winner 🏆",
-      type: "achievement"
+  React.useEffect(() => {
+    if (onDownload) {
+      onDownload(() => downloadRef.current);
     }
-  ];
-
-  const badges = [
-    { name: "Innovator", points: 320 },
-    { name: "Leader", points: null },
-    { name: "Mentor", points: null },
-  ];
-
-  const currentLevel = {
-    level: "ADVANCED",
-    totalPoints: 320
-  };
-
+  }, [onDownload]);
   return (
-    <div style={{
-      minHeight: '100vh',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      padding: isModal ? '0' : '1rem 1.5rem',
-      backgroundColor: '#f8fafc'
-    }}>
-      <div style={{
-        maxWidth: '80rem',
-        margin: '0 auto',
-        backgroundColor: '#ffffff',
-        borderRadius: isModal ? '0' : '1.5rem',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-        overflow: 'hidden',
-        border: '1px solid #e2e8f0'
-      }}>
-        
-        {/* Header Section */}
-        <div style={{
-          background: 'linear-gradient(135deg, #312e81 0%, #1e293b 100%)',
-          color: '#ffffff',
-          padding: '2rem 3rem'
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <h1 style={{
-              fontSize: '3rem',
-              fontWeight: '900',
-              letterSpacing: '-0.025em',
-              marginBottom: '1rem',
-              margin: 0
-            }}>
-              {studentDetails.name}
-            </h1>
-            <p style={{
-              fontSize: '1.25rem',
-              color: '#a5b4fc',
-              fontWeight: '500',
-              marginBottom: '1.5rem'
-            }}>{studentDetails.title}</p>
-            
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              gap: '1.5rem',
-              fontSize: '0.875rem'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ color: '#a5b4fc' }}>📧</span>
-                <span>{studentDetails.email}</span>
+    <>
+      <style jsx>{`
+        .portfolio-container {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+          padding: 24px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .portfolio-content {
+          max-width: 1024px;
+          margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        }
+
+        .card {
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+          border: 1px solid #e2e8f0;
+          transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          cursor: pointer;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.1), transparent);
+          transition: left 0.6s ease;
+        }
+
+        .card:hover::before {
+          left: 100%;
+        }
+
+        .card:hover {
+          transform: translateY(-8px) scale(1.02);
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+          border-color: #0f172a;
+        }
+
+        .card:active {
+          transform: translateY(-4px) scale(0.98);
+        }
+
+        .card-content {
+          padding: 32px;
+        }
+
+        .header-card {
+          border-left: 4px solid #0f172a;
+        }
+
+        .header-section {
+          text-align: center;
+          border-bottom: 2px solid #e2e8f0;
+          padding-bottom: 24px;
+          margin-bottom: 24px;
+        }
+
+        .logo-photo-container {
+          display: flex;
+          justify-content: center;
+          gap: 40px;
+          margin-bottom: 32px;
+          flex-wrap: wrap;
+        }
+
+        .logo-container, .photo-container {
+          text-align: center;
+        }
+
+        .logo-placeholder {
+          width: 140px;
+          height: 140px;
+          background: linear-gradient(135deg, #0f172a, #1e293b);
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 12px;
+          color: white;
+          transition: all 0.4s ease;
+          cursor: pointer;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .logo-placeholder::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 0;
+          height: 0;
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          transform: translate(-50%, -50%);
+          transition: all 0.6s ease;
+        }
+
+        .logo-placeholder:hover {
+          transform: scale(1.1) rotate(5deg);
+          box-shadow: 0 15px 30px rgba(15, 23, 42, 0.4);
+          animation: pulse 2s infinite;
+        }
+
+        .logo-placeholder:hover::after {
+          width: 200px;
+          height: 200px;
+        }
+
+        .logo-placeholder:active {
+          transform: scale(0.95);
+        }
+
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 15px 30px rgba(15, 23, 42, 0.4); }
+          50% { box-shadow: 0 15px 30px rgba(15, 23, 42, 0.6), 0 0 0 10px rgba(15, 23, 42, 0.1); }
+        }
+
+        .photo-placeholder {
+          width: 140px;
+          height: 140px;
+          border-radius: 12px;
+          border: 2px solid #0f172a;
+          margin-bottom: 12px;
+          background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s ease;
+        }
+
+        .photo-placeholder:hover {
+          transform: scale(1.05);
+          border-color: #0891b2;
+        }
+
+        .photo-text {
+          font-size: 14px;
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .main-title {
+          font-size: 2.5rem;
+          font-weight: 700;
+          color: #0f172a;
+          margin-bottom: 8px;
+          letter-spacing: -0.025em;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          position: relative;
+          display: inline-block;
+        }
+
+        .main-title:hover {
+          transform: scale(1.05);
+          color: #0891b2;
+          text-shadow: 0 0 20px rgba(8, 145, 178, 0.3);
+        }
+
+        .main-title:active {
+          transform: scale(0.95);
+        }
+
+        .student-details {
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          padding: 24px;
+          background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+        }
+
+        .student-details h2 {
+          font-size: 1.5rem;
+          font-weight: 600;
+          margin-bottom: 20px;
+          color: #0f172a;
+        }
+
+        .details-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 20px;
+          margin-bottom: 20px;
+        }
+
+        .details-grid p, .contact-info p {
+          margin: 10px 0;
+          color: #334155;
+          font-weight: 500;
+        }
+
+        .details-grid span, .contact-info span {
+          color: #64748b;
+          margin-right: 8px;
+          font-weight: 400;
+        }
+
+        .contact-info {
+          padding-top: 20px;
+          border-top: 1px solid #e2e8f0;
+        }
+
+        .section-title {
+          font-size: 1.5rem;
+          font-weight: 600;
+          margin-bottom: 24px;
+          color: #0f172a;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .section-title svg {
+          color: #0891b2;
+        }
+
+        .achievements {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .achievement-item {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          padding: 24px;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          transition: all 0.3s ease;
+          cursor: pointer;
+        }
+
+        .achievement-item:hover {
+          transform: translateX(12px) scale(1.02);
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .achievement-item:active {
+          transform: translateX(8px) scale(0.98);
+        }
+
+        .achievement-item::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+          transform: translateX(-100%);
+          transition: transform 0.6s ease;
+        }
+
+        .achievement-item:hover::before {
+          transform: translateX(100%);
+        }
+
+        .achievement-item.gold {
+          background: linear-gradient(135deg, #fef3c7, #fde68a);
+          border-color: #f59e0b;
+        }
+
+        .achievement-item.blue {
+          background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+          border-color: #3b82f6;
+        }
+
+        .achievement-item.green {
+          background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+          border-color: #10b981;
+        }
+
+        .achievement-icon {
+          padding: 12px;
+          border-radius: 50%;
+          background: white;
+          border: 2px solid;
+          transition: all 0.3s ease;
+        }
+
+        .achievement-item.gold .achievement-icon {
+          border-color: #f59e0b;
+          color: #f59e0b;
+        }
+
+        .achievement-item.blue .achievement-icon {
+          border-color: #3b82f6;
+          color: #3b82f6;
+        }
+
+        .achievement-item.green .achievement-icon {
+          border-color: #10b981;
+          color: #10b981;
+        }
+
+        .achievement-item:hover .achievement-icon {
+          transform: rotate(360deg) scale(1.2);
+          box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .achievement-icon:active {
+          transform: scale(0.8);
+        }
+
+        .achievement-title {
+          font-weight: 600;
+          display: block;
+          margin-bottom: 6px;
+          color: #0f172a;
+          font-size: 1.1rem;
+        }
+
+        .achievement-item p {
+          font-size: 0.9rem;
+          color: #64748b;
+          margin: 0;
+        }
+
+        .timeline {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .timeline-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 20px;
+          background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          transition: all 0.3s ease;
+        }
+
+        .timeline-item:hover {
+          background: white;
+          border-color: #0891b2;
+          transform: translateY(-4px) scale(1.02);
+          box-shadow: 0 8px 20px rgba(8, 145, 178, 0.2);
+        }
+
+        .timeline-item:active {
+          transform: translateY(-2px) scale(0.98);
+        }
+
+        .timeline-item::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(90deg, transparent, rgba(8, 145, 178, 0.1), transparent);
+          transform: translateX(-100%);
+          transition: transform 0.5s ease;
+        }
+
+        .timeline-item:hover::after {
+          transform: translateX(100%);
+        }
+
+        .timeline-item.latest {
+          background: linear-gradient(135deg, #fef3c7, #fde68a);
+          border-color: #f59e0b;
+        }
+
+        .timeline-content {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .badge {
+          background: #0f172a;
+          color: white;
+          padding: 6px 16px;
+          border-radius: 20px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .badge:hover {
+          transform: scale(1.1);
+          box-shadow: 0 4px 12px rgba(15, 23, 42, 0.3);
+        }
+
+        .badge:active {
+          transform: scale(0.95);
+        }
+
+        .badges .badge:hover {
+          animation: bounce 0.6s ease;
+        }
+
+        @keyframes bounce {
+          0%, 20%, 50%, 80%, 100% { transform: translateY(0) scale(1.1); }
+          40% { transform: translateY(-10px) scale(1.1); }
+          60% { transform: translateY(-5px) scale(1.1); }
+        }
+
+        .timeline-item.latest .badge {
+          background: #f59e0b;
+        }
+
+        .timeline-item span:not(.badge) {
+          font-weight: 600;
+          color: #0f172a;
+        }
+
+        .timeline-item p {
+          font-size: 0.875rem;
+          color: #64748b;
+          margin: 4px 0 0 0;
+        }
+
+        .check-icon {
+          color: #10b981;
+        }
+
+        .trophy-icon {
+          color: #f59e0b;
+        }
+
+        .badges-section {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-top: 12px;
+        }
+
+        .badge.success {
+          background: #10b981;
+          color: white;
+        }
+
+        .badge.primary {
+          background: #3b82f6;
+          color: white;
+        }
+
+        .badge.accent {
+          background: #0891b2;
+          color: white;
+        }
+
+        .level-info {
+          background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+          padding: 20px;
+          border-radius: 12px;
+          border: 1px solid #3b82f6;
+        }
+
+        .level {
+          color: #0f172a;
+          font-weight: 700;
+          font-size: 1.1rem;
+        }
+
+        .points {
+          color: #64748b;
+        }
+
+        .contact-card {
+          background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+          border-left: 4px solid #0891b2;
+        }
+
+        .contact-card h2 {
+          text-align: center;
+          color: #0f172a;
+          margin-bottom: 24px;
+          font-size: 1.5rem;
+        }
+
+        .contact-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          justify-content: center;
+        }
+
+        .btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 24px;
+          border-radius: 8px;
+          border: none;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          font-size: 0.95rem;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .btn.primary {
+          background: #0f172a;
+          color: white;
+        }
+
+        .btn.primary:hover {
+          background: #1e293b;
+          transform: translateY(-4px) scale(1.05);
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.3);
+        }
+
+        .btn:active {
+          transform: translateY(-2px) scale(0.95);
+        }
+
+        .btn::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 0;
+          height: 0;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 50%;
+          transform: translate(-50%, -50%);
+          transition: all 0.4s ease;
+        }
+
+        .btn:hover::before {
+          width: 300px;
+          height: 300px;
+        }
+
+        .btn.accent {
+          background: #0891b2;
+          color: white;
+        }
+
+        .btn.accent:hover {
+          background: #0e7490;
+          transform: translateY(-4px) scale(1.05);
+          box-shadow: 0 8px 20px rgba(8, 145, 178, 0.3);
+        }
+
+        .btn.outline {
+          background: transparent;
+          color: #0f172a;
+          border: 2px solid #0f172a;
+        }
+
+        .btn.outline:hover {
+          background: #0f172a;
+          color: white;
+          transform: translateY(-4px) scale(1.05);
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.3);
+        }
+
+        .footer-card {
+          background: #0f172a;
+          color: white;
+        }
+
+        .footer-card .card-content {
+          text-align: center;
+          padding: 20px;
+        }
+
+        .footer-card p {
+          font-size: 0.9rem;
+          color: #cbd5e1;
+          margin: 0;
+        }
+
+        .footer-card span {
+          font-weight: 600;
+          color: white;
+        }
+
+        @media (max-width: 768px) {
+          .portfolio-container {
+            padding: 16px;
+          }
+          
+          .card-content {
+            padding: 24px;
+          }
+          
+          .logo-photo-container {
+            gap: 20px;
+          }
+          
+          .main-title {
+            font-size: 2rem;
+          }
+          
+          .contact-buttons {
+            flex-direction: column;
+            align-items: center;
+          }
+          
+          .btn {
+            width: 100%;
+            max-width: 250px;
+            justify-content: center;
+          }
+        }
+      `}</style>
+
+      <div className="portfolio-container">
+        <div className="portfolio-content">
+          {/* Header Section */}
+          <div className="card header-card">
+            <div className="card-content">
+              <div className="header-section">
+                <div className="logo-photo-container">
+                  <div className="logo-container">
+                    <div className="logo-placeholder">
+                      <GraduationCap size={64} />
+                    </div>
+                    <p>[Large College Logo]</p>
+                  </div>
+                  <div className="photo-container">
+                    <div className="photo-placeholder">
+                      <div className="photo-text">[Student Photo]</div>
+                    </div>
+                  </div>
+                </div>
+                <h1 className="main-title">ADVANCED PORTFOLIO</h1>
+              </div>
+
+              {/* Student Details */}
+              <div className="student-details">
+                <h2>Student Details:</h2>
+                <div className="details-grid">
+                  <div>
+                    <p><span>Name:</span> XXXXX</p>
+                    <p><span>Dept:</span> IT</p>
+                  </div>
+                  <div>
+                    <p><span>Reg No:</span> 12345</p>
+                    <p><span>Year:</span> 3</p>
+                  </div>
+                </div>
+                <div className="contact-info">
+                  <p><span>Contact:</span> email@domain.com</p>
+                  <p><span>LinkedIn:</span> link</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Academic Information */}
-        <div style={{ padding: '2rem 3rem' }}>
-          <h2 style={{
-            fontSize: '1.5rem',
-            fontWeight: '700',
-            marginBottom: '2rem',
-            color: '#1e293b'
-          }}>Academic Information</h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-            gap: '1.5rem'
-          }}>
-            <div style={{
-              padding: '1.5rem',
-              borderRadius: '0.75rem',
-              backgroundColor: '#f1f5f9',
-              border: '1px solid #cbd5e1'
-            }}>
-              <h3 style={{
-                fontWeight: '600',
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                marginBottom: '0.5rem',
-                color: '#4338ca'
-              }}>Registration</h3>
-              <p style={{
-                fontSize: '1.125rem',
-                fontWeight: '700',
-                color: '#1e293b',
-                margin: 0
-              }}>{studentDetails.regNo}</p>
-            </div>
-            <div style={{
-              padding: '1.5rem',
-              borderRadius: '0.75rem',
-              backgroundColor: '#f1f5f9',
-              border: '1px solid #cbd5e1'
-            }}>
-              <h3 style={{
-                fontWeight: '600',
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                marginBottom: '0.5rem',
-                color: '#4338ca'
-              }}>Department</h3>
-              <p style={{
-                fontSize: '1.125rem',
-                fontWeight: '700',
-                color: '#1e293b',
-                margin: 0
-              }}>{studentDetails.dept}</p>
-            </div>
-            <div style={{
-              padding: '1.5rem',
-              borderRadius: '0.75rem',
-              backgroundColor: '#f1f5f9',
-              border: '1px solid #cbd5e1'
-            }}>
-              <h3 style={{
-                fontWeight: '600',
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                marginBottom: '0.5rem',
-                color: '#4338ca'
-              }}>Academic Year</h3>
-              <p style={{
-                fontSize: '1.125rem',
-                fontWeight: '700',
-                color: '#1e293b',
-                margin: 0
-              }}>{studentDetails.year}</p>
-            </div>
-            <div style={{
-              padding: '1.5rem',
-              borderRadius: '0.75rem',
-              backgroundColor: '#f1f5f9',
-              border: '1px solid #cbd5e1'
-            }}>
-              <h3 style={{
-                fontWeight: '600',
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                marginBottom: '0.5rem',
-                color: '#4338ca'
-              }}>Connect</h3>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <a href={`https://${studentDetails.linkedin}`} target="_blank" rel="noopener noreferrer" style={{ color: '#4338ca', fontWeight: '500', textDecoration: 'none' }}>LinkedIn</a>
-                <a href={`https://${studentDetails.github}`} target="_blank" rel="noopener noreferrer" style={{ color: '#4338ca', fontWeight: '500', textDecoration: 'none' }}>GitHub</a>
-              </div>
-            </div>
-          </div>
-        </div>
+          {/* Highlight Summary */}
+          <div className="card highlight-card">
+            <div className="card-content">
+              <h2 className="section-title">
+                <Trophy size={20} />
+                Certifications
+              </h2>
+              <div className="achievements">
+                <div className="achievement-item gold">
+                  <div className="achievement-icon">
+                    <Trophy size={24} />
+                  </div>
+                  <div>
+                    <span className="achievement-title">Technical Certifications 🏆</span>
+                    <p>✅ Programming, Cloud Computing, Database Management</p>
+                  </div>
+                </div>
 
-        {/* Key Achievements */}
-        <div style={{
-          padding: '2rem 3rem',
-          backgroundColor: '#f1f5f9',
-          borderTop: '1px solid #cbd5e1',
-          borderBottom: '1px solid #cbd5e1'
-        }}>
-          <h2 style={{
-            fontSize: '1.5rem',
-            fontWeight: '700',
-            marginBottom: '2rem',
-            color: '#1e293b'
-          }}>Key Achievements</h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: '1.5rem'
-          }}>
-            {highlightSummary.map((item, index) => (
-              <div key={index} style={{
-                padding: '1.5rem',
-                borderRadius: '0.75rem',
-                backgroundColor: '#ffffff',
-                border: '1px solid #cbd5e1',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                  <div style={{ fontSize: '1.875rem' }}>{item.icon}</div>
-                  <div style={{ flex: '1' }}>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600',
-                      marginBottom: '0.75rem',
-                      backgroundColor: '#e0e7ff',
-                      color: '#3730a3'
-                    }}>
-                      {item.category}
-                    </span>
-                    <p style={{
-                      fontSize: '1.125rem',
-                      fontWeight: '600',
-                      lineHeight: '1.75',
-                      color: '#1e293b',
-                      margin: 0
-                    }}>{item.text}</p>
+                <div className="achievement-item blue">
+                  <div className="achievement-icon">
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <span className="achievement-title">Academic Courses & MOOCs 📄</span>
+                    <p>✅ NPTEL, Coursera, edX Completion Certificates</p>
+                  </div>
+                </div>
+
+                <div className="achievement-item green">
+                  <div className="achievement-icon">
+                    <Briefcase size={24} />
+                  </div>
+                  <div>
+                    <span className="achievement-title">Professional Training 💼</span>
+                    <p>✅ Internship, Workshop & Seminar Certificates</p>
                   </div>
                 </div>
               </div>
-            ))}
+            </div>
           </div>
-        </div>
 
-        {/* Academic Journey */}
-        <div style={{ padding: '2rem 3rem' }}>
-          <h2 style={{
-            fontSize: '1.5rem',
-            fontWeight: '700',
-            marginBottom: '2rem',
-            color: '#1e293b'
-          }}>Academic Journey</h2>
-          <div style={{ position: 'relative' }}>
-            <div style={{
-              position: 'absolute',
-              left: '1.5rem',
-              top: '0',
-              height: '100%',
-              width: '2px',
-              backgroundColor: '#a5b4fc'
-            }}></div>
-            {achievementTimeline.map((item, index) => (
-              <div key={index} style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                marginBottom: '2rem',
-                position: 'relative'
-              }}>
-                <div style={{
-                  flexShrink: '0',
-                  width: '3rem',
-                  height: '3rem',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#ffffff',
-                  fontWeight: '700',
-                  fontSize: '0.875rem',
-                  zIndex: '10',
-                  backgroundColor: '#4338ca',
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-                }}>
-                  {item.year}
+          {/* Achievement Timeline */}
+          <div className="card timeline-card">
+            <div className="card-content">
+              <h2 className="section-title">
+                <Award size={20} />
+                Achievement Timeline
+              </h2>
+              <div className="timeline">
+                <div className="timeline-item">
+                  <div className="timeline-content">
+                    <span className="badge">Year 1</span>
+                    <div>
+                      <span>Foundation Courses → Completed</span>
+                      <p>📜 Programming, Mathematics, Basic IT Skills</p>
+                    </div>
+                  </div>
+                  <CheckCircle size={20} className="check-icon" />
                 </div>
-                <div style={{
-                  marginLeft: '1.5rem',
-                  padding: '1.5rem',
-                  borderRadius: '0.75rem',
-                  flex: '1',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #cbd5e1',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                }}>
-                  <h3 style={{
-                    fontSize: '1.25rem',
-                    fontWeight: '700',
-                    marginBottom: '0.5rem',
-                    color: '#1e293b',
-                    margin: '0 0 0.5rem 0'
-                  }}>{item.title}</h3>
-                  <p style={{
-                    lineHeight: '1.75',
-                    color: '#64748b',
-                    margin: 0
-                  }}>{item.description}</p>
+
+                <div className="timeline-item">
+                  <div className="timeline-content">
+                    <span className="badge">Year 2</span>
+                    <div>
+                      <span>Core Subject Certifications → Earned</span>
+                      <p>📜 Data Structures, DBMS, Web Development</p>
+                    </div>
+                  </div>
+                  <CheckCircle size={20} className="check-icon" />
+                </div>
+
+                <div className="timeline-item latest">
+                  <div className="timeline-content">
+                    <span className="badge">Year 3</span>
+                    <div>
+                      <span>Advanced Specialization Certificates</span>
+                      <p>🏆 Current Focus: AI/ML, Cloud Computing, Projects</p>
+                    </div>
+                  </div>
+                  <Trophy size={20} className="trophy-icon" />
                 </div>
               </div>
-            ))}
+            </div>
           </div>
-        </div>
 
-        {/* Badges & Levels */}
-        <div style={{
-          padding: '2rem 3rem',
-          backgroundColor: '#f1f5f9',
-          borderTop: '1px solid #cbd5e1'
-        }}>
-          <h2 style={{
-            fontSize: '1.5rem',
-            fontWeight: '700',
-            marginBottom: '2rem',
-            color: '#1e293b'
-          }}>Badges & Levels</h2>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '1rem',
-              justifyContent: 'center',
-              marginBottom: '1.5rem'
-            }}>
-              {badges.map((badge, index) => (
-                <div key={index} style={{
-                  borderRadius: '9999px',
-                  padding: '0.75rem 1.5rem',
-                  fontSize: '0.875rem',
-                  fontWeight: '600',
-                  backgroundColor: '#e0e7ff',
-                  color: '#3730a3',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                }}>
-                  {badge.name}
-                  {badge.points && (
-                    <span style={{
-                      marginLeft: '0.5rem',
-                      backgroundColor: '#4338ca',
-                      color: '#ffffff',
-                      fontSize: '0.75rem',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '9999px'
-                    }}>{badge.points} Points</span>
-                  )}
+          {/* Badges & Levels */}
+          <div className="card badges-card">
+            <div className="card-content">
+              <h2>Badges & Levels</h2>
+              <div className="badges-section">
+                <div>
+                  <p>Earned:</p>
+                  <div className="badges">
+                    <span className="badge success">Innovator</span>
+                    <span className="badge primary">Leader</span>
+                    <span className="badge accent">Mentor</span>
+                  </div>
                 </div>
-              ))}
-            </div>
-            <div style={{
-              padding: '1.5rem',
-              borderRadius: '0.75rem',
-              backgroundColor: '#ffffff',
-              border: '1px solid #cbd5e1',
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-              display: 'inline-block'
-            }}>
-              <h3 style={{
-                fontSize: '1.25rem',
-                fontWeight: '700',
-                marginBottom: '0.5rem',
-                color: '#1e293b',
-                margin: '0 0 0.5rem 0'
-              }}>Current Level: {currentLevel.level}</h3>
-              <p style={{
-                color: '#64748b',
-                margin: 0
-              }}>Total Points: {currentLevel.totalPoints}</p>
+                <div className="level-info">
+                  <p>Current Level: <span className="level">ADVANCED</span> <span className="points">(320 Points)</span></p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Footer Section */}
-        <div style={{
-          textAlign: 'center',
-          padding: '1.5rem',
-          backgroundColor: '#f1f5f9',
-          color: '#64748b',
-          borderTop: '1px solid #cbd5e1'
-        }}>
-          <p style={{
-            fontSize: '0.875rem',
-            fontWeight: '500',
-            margin: 0
-          }}>🎓 Digital Portfolio • Verified & Generated via Smart Student Hub</p>
-          <p style={{
-            fontSize: '0.75rem',
-            marginTop: '0.5rem',
-            opacity: '0.75',
-            margin: '0.5rem 0 0 0'
-          }}>Last Updated: {new Date().toLocaleDateString()}</p>
+          {/* Contact Actions */}
+          <div className="card contact-card">
+            <div className="card-content">
+              <h2>Let's Connect!</h2>
+              <div className="contact-buttons">
+                <button className="btn primary">
+                  <Mail size={16} />
+                  Contact Me
+                </button>
+                <button className="btn accent">
+                  <Linkedin size={16} />
+                  LinkedIn Profile
+                </button>
+                <button className="btn outline">
+                  <Phone size={16} />
+                  Call Me
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="card footer-card">
+            <div className="card-content">
+              <p><span>Footer:</span> Verified & Generated via Smart Student Hub</p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
-export default AdvancePortfolio;
+export default AdvancedPortfolio;
