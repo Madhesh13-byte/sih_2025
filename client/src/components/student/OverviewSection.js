@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, TrendingUp, Award, Target, Upload, BarChart3 } from 'lucide-react';
+import { Calendar, TrendingUp, Award, Target, Upload, BarChart3, Clock } from 'lucide-react';
 import { AnimatedProgressBar, AnimatedCircularProgress, AnimatedBarChart } from '../AnimatedCharts';
 import '../AnimatedCharts.css';
 import './StudentDashboard.css';
 function OverviewSection({ user }) {
   const [overallAttendance, setOverallAttendance] = useState(0);
   const [cgpa, setCgpa] = useState(0);
+  const [timetable, setTimetable] = useState([]);
 
   useEffect(() => {
     fetchOverallAttendance();
     fetchCGPA();
+    fetchTimetable();
   }, []);
 
   const fetchOverallAttendance = async () => {
@@ -39,6 +41,21 @@ function OverviewSection({ user }) {
       }
     } catch (error) {
       console.error('Failed to fetch CGPA:', error);
+    }
+  };
+
+  const fetchTimetable = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/student/timetable', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setTimetable(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch timetable:', error);
     }
   };
 
@@ -122,6 +139,50 @@ function OverviewSection({ user }) {
           ]}
           height={200}
         />
+      </div>
+
+      {/* Today's Timetable */}
+      <div className="todays-timetable">
+        <h3>Today's Schedule</h3>
+        {timetable.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '15px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8f9fa' }}>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Period</th>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Time</th>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Subject</th>
+                  <th style={{ padding: '12px', border: '1px solid #e1e8ed', textAlign: 'left' }}>Staff</th>
+                </tr>
+              </thead>
+              <tbody>
+                {timetable.slice(0, 8).map((period, index) => (
+                  <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8f9fa' }}>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed', fontWeight: '500' }}>{period.period_number}</td>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <Clock size={14} />
+                        {period.start_time} - {period.end_time}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>
+                      <div>
+                        <strong>{period.subject_code}</strong>
+                        <br />
+                        <small>{period.subject_name}</small>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed' }}>{period.staff_name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ padding: '20px', textAlign: 'center', color: '#6c757d' }}>
+            No timetable available
+          </div>
+        )}
       </div>
 
       <div className="quick-actions">

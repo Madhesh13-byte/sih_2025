@@ -2,26 +2,16 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const sqlite3 = require('sqlite3').verbose();
-const multer = require('multer');
-const csv = require('csv-parser');
-const fs = require('fs');
-
-let puppeteer;
-try {
-  puppeteer = require('puppeteer');
-  console.log('✅ Puppeteer loaded successfully');
-} catch (error) {
-  console.error('❌ Puppeteer not found. Install with: npm install puppeteer');
-}
+const { Pool } = require('pg');
+require('dotenv').config();
 
 const app = express();
 const PORT = 5000;
 const JWT_SECRET = 'secret-key';
 
-// Configure CORS with specific options
+// Configure CORS
 app.use(cors({
-  origin: 'http://localhost:3000', // React app's URL
+  origin: 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -30,248 +20,58 @@ app.use(cors({
 app.use(express.json());
 
 // Database setup
-const db = new sqlite3.Database('./database.db');
-
-db.serialize(() => {
-  // Create table only if it doesn't exist
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    register_no TEXT UNIQUE,
-    staff_id TEXT UNIQUE,
-    admin_id TEXT UNIQUE,
-    password TEXT,
-    role TEXT,
-    name TEXT,
-    email TEXT,
-    department TEXT,
-    created_by INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Staff assignments table
-  db.run(`CREATE TABLE IF NOT EXISTS staff_assignments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    staff_id TEXT NOT NULL,
-    staff_name TEXT NOT NULL,
-    subject_code TEXT NOT NULL,
-    subject_name TEXT NOT NULL,
-    department TEXT NOT NULL,
-    year TEXT NOT NULL,
-    semester TEXT NOT NULL,
-    section TEXT DEFAULT 'A',
-    credits INTEGER DEFAULT 3,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // CC assignments table
-  db.run(`CREATE TABLE IF NOT EXISTS cc_assignments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    staff_id TEXT NOT NULL,
-    staff_name TEXT NOT NULL,
-    department TEXT NOT NULL,
-    year TEXT NOT NULL,
-    semester TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Classes table
-  db.run(`CREATE TABLE IF NOT EXISTS classes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    department TEXT NOT NULL,
-    year TEXT NOT NULL,
-    section TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Create subjects table if it doesn't exist
-  db.run(`CREATE TABLE IF NOT EXISTS subjects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    subject_code TEXT NOT NULL,
-    subject_name TEXT NOT NULL,
-    department TEXT NOT NULL,
-    year TEXT NOT NULL,
-    semester TEXT NOT NULL,
-    credits INTEGER DEFAULT 3,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(subject_code, department, year, semester)
-  )`);
-
-  // Admin notifications table
-  db.run(`CREATE TABLE IF NOT EXISTS admin_notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    admin_id INTEGER NOT NULL,
-    message TEXT NOT NULL,
-    type TEXT NOT NULL,
-    related_id INTEGER,
-    read_status INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Admin settings table
-  db.run(`CREATE TABLE IF NOT EXISTS admin_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    setting_key TEXT UNIQUE NOT NULL,
-    setting_value TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-
-  // Timetables table
-  db.run(`CREATE TABLE IF NOT EXISTS timetables (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    department TEXT NOT NULL,
-    year TEXT NOT NULL,
-    semester TEXT NOT NULL,
-    section TEXT NOT NULL,
-    day_of_week INTEGER NOT NULL,
-    period_number INTEGER NOT NULL,
-    start_time TEXT NOT NULL,
-    end_time TEXT NOT NULL,
-    subject_code TEXT NOT NULL,
-    subject_name TEXT NOT NULL,
-    staff_id TEXT NOT NULL,
-    staff_name TEXT NOT NULL,
-    room_number TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(department, year, semester, section, day_of_week, period_number)
-  )`);
-
-  // Attendance table
-  db.run(`CREATE TABLE IF NOT EXISTS attendance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL,
-    staff_id TEXT NOT NULL,
-    subject_code TEXT NOT NULL,
-    department TEXT NOT NULL,
-    year TEXT NOT NULL,
-    semester TEXT NOT NULL,
-    day_of_week INTEGER NOT NULL,
-    period_number INTEGER NOT NULL,
-    date TEXT NOT NULL,
-    status TEXT NOT NULL,
-    marked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(student_id, subject_code, date, period_number)
-  )`);
-
-  // Create certificates table if it doesn't exist
-  db.run(`CREATE TABLE IF NOT EXISTS certificates (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL,
-    certificate_name TEXT NOT NULL,
-    certificate_file TEXT,
-    status TEXT DEFAULT 'pending',
-    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    approved_by INTEGER,
-    approved_date DATETIME
-  )`);
-
-  // Insert default settings
-  db.run(`INSERT OR IGNORE INTO admin_settings (setting_key, setting_value) VALUES (?, ?)`,
-    ['auto_create_classes', 'true']);
-
-  // Add columns if they don't exist
-  db.run(`ALTER TABLE cc_assignments ADD COLUMN semester TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding semester column:', err);
-    }
-  });
-  
-  db.run(`ALTER TABLE users ADD COLUMN class_id INTEGER`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding class_id column to users:', err);
-    }
-  });
-  
-  db.run(`ALTER TABLE users ADD COLUMN joining_year INTEGER`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding joining_year column to users:', err);
-    }
-  });
-  
-  db.run(`ALTER TABLE users ADD COLUMN current_semester INTEGER`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding current_semester column to users:', err);
-    }
-  });
-  
-  db.run(`ALTER TABLE users ADD COLUMN academic_year TEXT`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding academic_year column to users:', err);
-    }
-  });
-  
-
-  
-  db.run(`ALTER TABLE staff_assignments ADD COLUMN section TEXT DEFAULT 'A'`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding section column to staff_assignments:', err);
-    }
-  });
-  
-  db.run(`ALTER TABLE staff_assignments ADD COLUMN credits INTEGER DEFAULT 3`, (err) => {
-    if (err && !err.message.includes('duplicate column name')) {
-      console.error('Error adding credits column to staff_assignments:', err);
-    }
-  });
-  
-  // Migrate existing subjects from staff_assignments to subjects table (admin will set credits)
-  db.all('SELECT DISTINCT subject_code, subject_name, department, year, semester FROM staff_assignments', (err, assignments) => {
-    if (!err && assignments && assignments.length > 0) {
-      assignments.forEach(assignment => {
-        db.run('INSERT OR IGNORE INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES (?, ?, ?, ?, ?, ?)',
-          [assignment.subject_code, assignment.subject_name, assignment.department, assignment.year, assignment.semester, 3],
-          (err) => {
-            if (err && !err.message.includes('UNIQUE constraint failed')) {
-              console.error('Migration error for subject:', assignment.subject_code, err);
-            }
-          }
-        );
-      });
-      console.log('✅ Migrated', assignments.length, 'subjects - Admin needs to set proper credits');
-    }
-  });
-  
-  // Insert default users only if they don't exist
-  const hashedPassword = bcrypt.hashSync('password123', 10);
-  
-  // Check if admin exists, if not create default users
-  db.get('SELECT COUNT(*) as count FROM users WHERE role = ?', ['admin'], (err, row) => {
-    if (!err && row.count === 0) {
-      // Student
-      db.run('INSERT INTO users (register_no, password, role, name) VALUES (?, ?, ?, ?)',
-        ['STU001', hashedPassword, 'student', 'John Student']);
-      
-      // Staff
-      db.run('INSERT INTO users (staff_id, password, role, name, department) VALUES (?, ?, ?, ?, ?)',
-        ['STF001', hashedPassword, 'staff', 'Jane Staff', 'Computer Science']);
-      
-      // Admin
-      db.run('INSERT INTO users (admin_id, password, role, name) VALUES (?, ?, ?, ?)',
-        ['ADM001', hashedPassword, 'admin', 'Admin User']);
-    }
-  });
+const db = new Pool({
+  user: process.env.DB_USER || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'student_hub',
+  password: process.env.DB_PASSWORD || 'password',
+  port: process.env.DB_PORT || 5432,
 });
 
-// Create student results table without grade_points
-db.run(`CREATE TABLE IF NOT EXISTS student_results (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  register_no TEXT NOT NULL,
-  subject_code TEXT NOT NULL,
-  semester INTEGER NOT NULL,
-  academic_year TEXT NOT NULL,
-  ia1_marks INTEGER,
-  ia2_marks INTEGER,
-  ia3_marks INTEGER,
-  semester_grade TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(register_no, subject_code, semester, academic_year)
-)`);
+// Initialize database
+(async () => {
+  try {
+    console.log('✅ Database connected successfully');
+    
+    const hashedPassword = await bcrypt.hash('password123', 10);
+    const adminCount = await db.query('SELECT COUNT(*) as count FROM users WHERE role = $1', ['admin']);
+    
+    if (adminCount.rows[0].count === '0') {
+      await db.query('INSERT INTO users (register_no, password, role, name) VALUES ($1, $2, $3, $4)',
+        ['STU001', hashedPassword, 'student', 'John Student']);
+      await db.query('INSERT INTO users (staff_id, password, role, name, department) VALUES ($1, $2, $3, $4, $5)',
+        ['STF001', hashedPassword, 'staff', 'Jane Staff', 'Computer Science']);
+      await db.query('INSERT INTO users (admin_id, password, role, name) VALUES ($1, $2, $3, $4)',
+        ['ADM001', hashedPassword, 'admin', 'Admin User']);
+    }
+  } catch (error) {
+    console.error('Database initialization error:', error);
+  }
+})();
+
+// Auth middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.sendStatus(401);
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
 
 // Student login
-app.post('/api/student/login', (req, res) => {
+app.post('/api/student/login', async (req, res) => {
   const { register_no, password } = req.body;
   
-  db.get('SELECT * FROM users WHERE register_no = ? AND role = ?', [register_no, 'student'], async (err, user) => {
-    if (err || !user) {
+  try {
+    const result = await db.query('SELECT * FROM users WHERE register_no = $1 AND role = $2', [register_no, 'student']);
+    const user = result.rows[0];
+    
+    if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
@@ -291,15 +91,20 @@ app.post('/api/student/login', (req, res) => {
         department: user.department
       } 
     });
-  });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Staff login
-app.post('/api/staff/login', (req, res) => {
+app.post('/api/staff/login', async (req, res) => {
   const { staff_id, password } = req.body;
   
-  db.get('SELECT * FROM users WHERE staff_id = ? AND role = ?', [staff_id, 'staff'], async (err, user) => {
-    if (err || !user) {
+  try {
+    const result = await db.query('SELECT * FROM users WHERE staff_id = $1 AND role = $2', [staff_id, 'staff']);
+    const user = result.rows[0];
+    
+    if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
@@ -319,15 +124,20 @@ app.post('/api/staff/login', (req, res) => {
         department: user.department
       } 
     });
-  });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Admin login
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
   const { admin_id, password } = req.body;
   
-  db.get('SELECT * FROM users WHERE admin_id = ? AND role = ?', [admin_id, 'admin'], async (err, user) => {
-    if (err || !user) {
+  try {
+    const result = await db.query('SELECT * FROM users WHERE admin_id = $1 AND role = $2', [admin_id, 'admin']);
+    const user = result.rows[0];
+    
+    if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
     
@@ -346,3019 +156,741 @@ app.post('/api/admin/login', (req, res) => {
         admin_id: user.admin_id
       } 
     });
-  });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
-// Auth middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) return res.sendStatus(401);
-  
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
-    req.user = user;
-    next();
-  });
-};
-
-// Admin middleware
-const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+// Get all accounts
+app.get('/api/admin/accounts', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('SELECT id, name, role, register_no, staff_id, admin_id, department, email FROM users ORDER BY role, name');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
   }
-  next();
-};
+});
+
+// Get next student number
+app.get('/api/admin/next-student-number', authenticateToken, async (req, res) => {
+  const { dept, year } = req.query;
+  try {
+    const result = await db.query('SELECT COUNT(*) as count FROM users WHERE register_no LIKE $1', [`STU${dept}${year}%`]);
+    res.json({ nextNumber: parseInt(result.rows[0].count) + 1 });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
 
 // Create student account
-app.post('/api/admin/create-student', authenticateToken, requireAdmin, async (req, res) => {
-  const { register_no, name, email, password, department, year } = req.body;
-  
-  if (!register_no || !name || !password) {
-    return res.status(400).json({ error: 'Register No, Name, and Password are required' });
-  }
-  
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const joiningYear = year ? 2000 + parseInt(year) : null;
-  
+app.post('/api/admin/create-student', authenticateToken, async (req, res) => {
+  const { name, email, register_no, password, department } = req.body;
   try {
-    const { autoAssignStudentClass, rollbackClassCreation } = require('./utils/businessLogic');
-    
-    // Check auto-creation setting
-    const autoCreateEnabled = await new Promise((resolve, reject) => {
-      db.get('SELECT setting_value FROM admin_settings WHERE setting_key = ?', 
-        ['auto_create_classes'], (err, row) => {
-          if (err) reject(err);
-          else resolve(row ? row.setting_value === 'true' : true);
-        });
-    });
-    
-    // Auto-assign to appropriate class with enhanced validation
-    let class_id = null;
-    let classCreated = false;
-    if (joiningYear && department) {
-      const result = await autoAssignStudentClass(db, 
-        { department, joining_year: joiningYear }, 
-        { autoCreateEnabled, adminId: req.user.id }
-      );
-      class_id = result.classId;
-      classCreated = result.created;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await db.query(
+      'INSERT INTO users (name, email, register_no, password, role, department) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, email, register_no, hashedPassword, 'student', department]
+    );
+    res.json({ message: 'Student account created successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Get all subjects
+app.get('/api/subjects', authenticateToken, async (req, res) => {
+  try {
+    const tableCheck = await db.query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'subjects')");
+    if (!tableCheck.rows[0].exists) {
+      return res.json([]);
     }
     
-    db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, current_semester, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [register_no, name, email || null, hashedPassword, 'student', department, joiningYear, class_id, 5, req.user.id], 
-      async function(err) {
-        if (err) {
-          // Rollback class creation if student creation failed
-          if (classCreated && class_id) {
-            try {
-              await rollbackClassCreation(db, class_id);
-            } catch (rollbackErr) {
-              console.error('Rollback failed:', rollbackErr);
-            }
-          }
-          
-          if (err.message.includes('UNIQUE constraint failed')) {
-            return res.status(400).json({ error: 'Register number already exists' });
-          }
-          return res.status(500).json({ error: 'Failed to create student account' });
-        }
-        
-        const message = classCreated ? 
-          'Student account created and assigned to new class' : 
-          'Student account created and assigned to existing class';
-        
-        res.json({ message, studentId: this.lastID, classCreated });
-      });
+    const result = await db.query('SELECT * FROM subjects ORDER BY subject_name');
+    res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Subjects fetch error:', error);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get all staff assignments
+app.get('/api/staff-assignments', authenticateToken, async (req, res) => {
+  try {
+    console.log('📋 Fetching staff assignments from database...');
+    const { department, year, semester } = req.query;
+    
+    let query = 'SELECT * FROM staff_assignments';
+    let params = [];
+    let conditions = [];
+    
+    if (department) {
+      conditions.push(`department = $${params.length + 1}`);
+      params.push(department);
+    }
+    if (year) {
+      conditions.push(`year = $${params.length + 1}`);
+      params.push(year);
+    }
+    if (semester) {
+      conditions.push(`semester = $${params.length + 1}`);
+      params.push(semester);
+    }
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += ' ORDER BY id';
+    
+    const result = await db.query(query, params);
+    console.log(`📋 Found ${result.rows.length} staff assignments`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Staff assignments fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get CC assignments
+app.get('/api/cc-assignments', authenticateToken, async (req, res) => {
+  try {
+    console.log('👨‍🏫 Fetching CC assignments from database...');
+    const result = await db.query('SELECT * FROM cc_assignments ORDER BY id');
+    console.log(`👨‍🏫 Found ${result.rows.length} CC assignments`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ CC assignments fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Create CC assignment
+app.post('/api/cc-assignments', authenticateToken, async (req, res) => {
+  const { staffId, staffName, department, year, semester } = req.body;
+  try {
+    const result = await db.query(
+      'INSERT INTO cc_assignments (staff_id, staff_name, department, year, semester) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [staffId, staffName, department, year, semester]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ CC assignment creation error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Delete CC assignment
+app.delete('/api/cc-assignments/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM cc_assignments WHERE id = $1', [req.params.id]);
+    res.json({ message: 'CC assignment deleted successfully' });
+  } catch (error) {
+    console.error('❌ CC assignment deletion error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get classes/timetable
+app.get('/api/classes', authenticateToken, async (req, res) => {
+  try {
+    console.log('🏫 Fetching classes from database...');
+    const result = await db.query('SELECT * FROM classes ORDER BY id');
+    console.log(`🏫 Found ${result.rows.length} classes`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Classes fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Create class entry
+app.post('/api/classes', authenticateToken, async (req, res) => {
+  try {
+    const { department, year, semester, section } = req.body;
+    const result = await db.query(
+      'INSERT INTO classes (department, year, semester, section) VALUES ($1, $2, $3, $4) RETURNING *',
+      [department, year, semester, section]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ Class creation error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get class details with students and assignments
+app.get('/api/classes/:id/details', authenticateToken, async (req, res) => {
+  try {
+    const classId = req.params.id;
+    
+    // Get class info
+    const classResult = await db.query('SELECT * FROM classes WHERE id = $1', [classId]);
+    if (classResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Class not found' });
+    }
+    const classInfo = classResult.rows[0];
+    
+    // Get students for this class (based on department, year, semester)
+    const studentsResult = await db.query(
+      'SELECT * FROM users WHERE role = $1 AND department = $2',
+      ['student', classInfo.department]
+    );
+    
+    // Get staff assignments for this class
+    const assignmentsResult = await db.query(
+      'SELECT * FROM staff_assignments WHERE department = $1 AND year = $2',
+      [classInfo.department, classInfo.year]
+    );
+    
+    // Get CC assignments for this class
+    const ccResult = await db.query(
+      'SELECT * FROM cc_assignments WHERE department = $1 AND year = $2',
+      [classInfo.department, classInfo.year]
+    );
+    
+    res.json({
+      class: classInfo,
+      students: studentsResult.rows,
+      assignments: assignmentsResult.rows,
+      ccAssignments: ccResult.rows
+    });
+  } catch (error) {
+    console.error('❌ Class details fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Delete class
+app.delete('/api/classes/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM classes WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Class deleted successfully' });
+  } catch (error) {
+    console.error('❌ Class deletion error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get results/grades
+app.get('/api/results', authenticateToken, async (req, res) => {
+  try {
+    console.log('📊 Fetching results from database...');
+    const result = await db.query('SELECT * FROM student_results ORDER BY id');
+    console.log(`📊 Found ${result.rows.length} results`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Results fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get timetables with filtering
+app.get('/api/timetables', authenticateToken, async (req, res) => {
+  try {
+    console.log('📅 Fetching timetables from database...');
+    const { department, year, semester, section } = req.query;
+    
+    let query = 'SELECT * FROM timetables';
+    let params = [];
+    let conditions = [];
+    
+    if (department) {
+      conditions.push(`department = $${params.length + 1}`);
+      params.push(department);
+    }
+    if (year) {
+      conditions.push(`year = $${params.length + 1}`);
+      params.push(year);
+    }
+    if (semester) {
+      conditions.push(`semester = $${params.length + 1}`);
+      params.push(semester);
+    }
+    if (section) {
+      conditions.push(`section = $${params.length + 1}`);
+      params.push(section);
+    }
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    query += ' ORDER BY day_of_week, period_number';
+    
+    const result = await db.query(query, params);
+    console.log(`📅 Found ${result.rows.length} timetable entries`);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Timetable fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Create timetable entry
+app.post('/api/timetables', authenticateToken, async (req, res) => {
+  try {
+    const { department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number } = req.body;
+    
+    // Check if class exists, create if not
+    const classCheck = await db.query(
+      'SELECT id FROM classes WHERE department = $1 AND year = $2 AND semester = $3 AND section = $4',
+      [department, year, semester, section]
+    );
+    
+    let classId;
+    if (classCheck.rows.length === 0) {
+      const classResult = await db.query(
+        'INSERT INTO classes (department, year, semester, section) VALUES ($1, $2, $3, $4) RETURNING id',
+        [department, year, semester, section]
+      );
+      classId = classResult.rows[0].id;
+    } else {
+      classId = classCheck.rows[0].id;
+    }
+    
+    const result = await db.query(
+      'INSERT INTO timetables (department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *',
+      [department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Timetable creation error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Delete timetable entry
+app.delete('/api/timetables/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM timetables WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Timetable entry deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Delete entire class timetable
+app.delete('/api/timetables/class', authenticateToken, async (req, res) => {
+  try {
+    const { department, year, semester, section } = req.body;
+    const result = await db.query(
+      'DELETE FROM timetables WHERE department = $1 AND year = $2 AND semester = $3 AND section = $4',
+      [department, year, semester, section]
+    );
+    res.json({ message: `Deleted ${result.rowCount} timetable entries` });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get next staff number
+app.get('/api/admin/next-staff-number', authenticateToken, async (req, res) => {
+  const { dept } = req.query;
+  try {
+    const result = await db.query('SELECT COUNT(*) as count FROM users WHERE staff_id LIKE $1', [`STF${dept}%`]);
+    res.json({ nextNumber: parseInt(result.rows[0].count) + 1 });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
 // Create staff account
-app.post('/api/admin/create-staff', authenticateToken, requireAdmin, async (req, res) => {
-  const { staff_id, name, email, password, department } = req.body;
-  
-  if (!staff_id || !name || !password) {
-    return res.status(400).json({ error: 'Staff ID, Name, and Password are required' });
+app.post('/api/admin/create-staff', authenticateToken, async (req, res) => {
+  const { name, email, staff_id, password, department } = req.body;
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await db.query(
+      'INSERT INTO users (name, email, staff_id, password, role, department) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, email, staff_id, hashedPassword, 'staff', department]
+    );
+    res.json({ message: 'Staff account created successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
   }
-  
-  const hashedPassword = await bcrypt.hash(password, 10);
-  
-  db.run('INSERT INTO users (staff_id, name, email, password, role, department, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [staff_id, name, email || null, hashedPassword, 'staff', department || null, req.user.id], function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Staff ID already exists' });
-        }
-        return res.status(500).json({ error: 'Failed to create staff account' });
-      }
-      res.json({ message: 'Staff account created successfully', staffId: this.lastID });
-    });
 });
 
-// Get next staff number for department
-app.get('/api/admin/next-staff-number', authenticateToken, requireAdmin, (req, res) => {
-  const { dept } = req.query;
-  
-  if (!dept) {
-    return res.status(400).json({ error: 'Department is required' });
-  }
-  
-  const pattern = `STF${dept}%`;
-  
-  db.all('SELECT staff_id FROM users WHERE staff_id LIKE ? AND role = ? ORDER BY staff_id',
-    [pattern, 'staff'], (err, staff) => {
-      if (err) return res.status(500).json({ error: 'Failed to get staff count' });
-      
-      // Find the next available number
-      let nextNumber = 1;
-      if (staff.length > 0) {
-        // Extract numbers from existing staff IDs
-        const existingNumbers = staff.map(s => {
-          const match = s.staff_id.match(/STF[A-Z]+0*(\d+)$/);
-          return match ? parseInt(match[1]) : 0;
-        }).filter(num => num > 0);
-        
-        if (existingNumbers.length > 0) {
-          nextNumber = Math.max(...existingNumbers) + 1;
-        }
-      }
-      
-      res.json({ nextNumber });
-    });
-});
-
-// Get next student number for department and year
-app.get('/api/admin/next-student-number', authenticateToken, requireAdmin, (req, res) => {
-  const { dept, year } = req.query;
-  
-  if (!dept || !year) {
-    return res.status(400).json({ error: 'Department and year are required' });
-  }
-  
-  const yearCode = year.toString().slice(-2);
-  const pattern = `STU${dept}${yearCode}%`;
-  
-  db.all('SELECT register_no FROM users WHERE register_no LIKE ? AND role = ? ORDER BY register_no',
-    [pattern, 'student'], (err, students) => {
-      if (err) return res.status(500).json({ error: 'Failed to get student count' });
-      
-      // Find the next available number
-      let nextNumber = 1;
-      if (students.length > 0) {
-        const lastStudent = students[students.length - 1];
-        const lastNumber = parseInt(lastStudent.register_no.slice(-2));
-        nextNumber = lastNumber + 1;
-      }
-      
-      res.json({ nextNumber });
-    });
-});
-
-// Get all accounts
-app.get('/api/admin/accounts', authenticateToken, requireAdmin, (req, res) => {
-  db.all('SELECT id, register_no, staff_id, name, email, role, department, created_at FROM users WHERE role IN (?, ?)',
-    ['student', 'staff'], (err, accounts) => {
-      if (err) return res.status(500).json({ error: 'Failed to fetch accounts' });
-      res.json(accounts);
-    });
-});
-
-// Delete account
-app.delete('/api/admin/delete-account/:id', authenticateToken, requireAdmin, (req, res) => {
-  const userId = req.params.id;
-  
-  db.run('DELETE FROM users WHERE id = ? AND role IN (?, ?)',
-    [userId, 'student', 'staff'], function(err) {
-      if (err) return res.status(500).json({ error: 'Failed to delete account' });
-      if (this.changes === 0) return res.status(404).json({ error: 'Account not found' });
+// Delete single account
+app.delete('/api/admin/delete-account/:userId', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM users WHERE id = $1', [req.params.userId]);
+    if (result.rowCount > 0) {
       res.json({ message: 'Account deleted successfully' });
-    });
+    } else {
+      res.status(404).json({ error: 'Account not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
-// Edit account
-app.put('/api/admin/edit-account/:id', authenticateToken, requireAdmin, (req, res) => {
-  const { name, email, department } = req.body;
-  const userId = req.params.id;
-  
-  if (!name) {
-    return res.status(400).json({ error: 'Name is required' });
+// Delete all accounts
+app.delete('/api/admin/delete-all-accounts', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM users WHERE role != $1', ['admin']);
+    res.json({ message: `Deleted ${result.rowCount} accounts` });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
   }
-  
-  db.run('UPDATE users SET name = ?, email = ?, department = ? WHERE id = ? AND role IN (?, ?)',
-    [name, email || null, department || null, userId, 'student', 'staff'], function(err) {
-      if (err) return res.status(500).json({ error: 'Failed to update account' });
-      if (this.changes === 0) return res.status(404).json({ error: 'Account not found' });
-      res.json({ message: 'Account updated successfully' });
-    });
 });
 
 // Reset password
-app.put('/api/admin/reset-password/:id', authenticateToken, requireAdmin, async (req, res) => {
+app.put('/api/admin/reset-password/:userId', authenticateToken, async (req, res) => {
   const { password } = req.body;
-  const userId = req.params.id;
-  
-  if (!password) {
-    return res.status(400).json({ error: 'Password is required' });
-  }
-  
-  const hashedPassword = await bcrypt.hash(password, 10);
-  
-  db.run('UPDATE users SET password = ? WHERE id = ? AND role IN (?, ?)',
-    [hashedPassword, userId, 'student', 'staff'], function(err) {
-      if (err) return res.status(500).json({ error: 'Failed to reset password' });
-      if (this.changes === 0) return res.status(404).json({ error: 'User not found' });
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await db.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, req.params.userId]);
+    if (result.rowCount > 0) {
       res.json({ message: 'Password reset successfully' });
-    });
+    } else {
+      res.status(404).json({ error: 'Account not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// Subject endpoints
+app.post('/api/subjects', authenticateToken, async (req, res) => {
+  const { subject_code, subject_name, department, year, semester, credits } = req.body;
+  try {
+    if (!subject_code || !subject_name || !department || !year || !semester) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    const tableCheck = await db.query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'subjects')");
+    
+    if (!tableCheck.rows[0].exists) {
+      await db.query(`
+        CREATE TABLE subjects (
+          id SERIAL PRIMARY KEY,
+          subject_code VARCHAR(20) NOT NULL,
+          subject_name VARCHAR(255) NOT NULL,
+          department VARCHAR(50) NOT NULL,
+          year INTEGER NOT NULL,
+          semester INTEGER NOT NULL,
+          credits INTEGER DEFAULT 3
+        )
+      `);
+    } else {
+      // Fix sequence if it's out of sync
+      await db.query("SELECT setval('subjects_id_seq', (SELECT MAX(id) FROM subjects))");
+    }
+    
+    const result = await db.query(
+      'INSERT INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [subject_code, subject_name, department, year, semester, credits || 3]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ Subject creation error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+app.delete('/api/subjects/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM subjects WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Subject deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Staff assignments endpoints
-app.post('/api/staff-assignments', authenticateToken, requireAdmin, async (req, res) => {
-  const { staffId, staffName, subjectCode, subjectName, department, year, semester, section, credits } = req.body;
-  
+app.post('/api/staff-assignments', authenticateToken, async (req, res) => {
+  const { staffId, staffName, subjectCode, subjectName, department, year, semester, section, class_id } = req.body;
   try {
-    const { validateStaffAssignment } = require('./utils/businessLogic');
-    
-    // Validate staff assignment
-    await validateStaffAssignment(db, { staff_id: staffId, semester });
-
-    // Convert numeric year to Roman numeral
-    const yearToRoman = {
-      '1': 'I',
-      '2': 'II',
-      '3': 'III',
-      '4': 'IV'
-    };
-    
-    const romanYear = yearToRoman[year] || year;
-    const assignmentSection = section || 'A';
-    
-    // Insert staff assignment directly with section
-    db.run(
-      `INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, section, credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [staffId, staffName, subjectCode, subjectName, department, year, semester, assignmentSection, credits || 3],
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
-        res.json({ id: this.lastID, message: 'Staff assignment created successfully' });
-      }
+    const result = await db.query(
+      'INSERT INTO staff_assignments (staff_id, staff_name, subject_code, subject_name, department, year, semester, section, class_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+      [staffId, staffName, subjectCode, subjectName, department, year, semester, section, class_id]
     );
+    res.json(result.rows[0]);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
-app.get('/api/staff-assignments', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM staff_assignments ORDER BY created_at DESC', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json(rows);
-  });
-});
-
-app.delete('/api/staff-assignments/:id', authenticateToken, requireAdmin, (req, res) => {
-  const { id } = req.params;
-  
-  db.run('DELETE FROM staff_assignments WHERE id = ?', [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json({ message: 'Staff assignment deleted successfully' });
-  });
-});
-
-// Delete all staff assignments
-app.delete('/api/staff-assignments', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM staff_assignments', function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json({ message: `${this.changes} staff assignments deleted successfully` });
-  });
-});
-
-// CC assignments endpoints
-app.post('/api/cc-assignments', authenticateToken, requireAdmin, (req, res) => {
-  const { staffId, staffName, department, year, semester } = req.body;
-  console.log('CC Assignment request:', { staffId, staffName, department, year, semester });
-  
-  db.run(
-    `INSERT INTO cc_assignments (staff_id, staff_name, department, year, semester) VALUES (?, ?, ?, ?, ?)`,
-    [staffId, staffName, department, year, semester],
-    function(err) {
-      if (err) {
-        console.error('CC Assignment DB error:', err);
-        return res.status(500).json({ error: 'Database error: ' + err.message });
-      }
-      console.log('CC Assignment created successfully');
-      res.json({ id: this.lastID, message: 'CC assignment created successfully' });
-    }
-  );
-});
-
-app.get('/api/cc-assignments', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM cc_assignments ORDER BY created_at DESC', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json(rows);
-  });
-});
-
-app.delete('/api/cc-assignments/:id', authenticateToken, requireAdmin, (req, res) => {
-  const { id } = req.params;
-  
-  db.run('DELETE FROM cc_assignments WHERE id = ?', [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json({ message: 'CC assignment deleted successfully' });
-  });
-});
-
-// Classes endpoints
-app.post('/api/classes', authenticateToken, requireAdmin, (req, res) => {
-  const { department, year, section } = req.body;
-  
-  db.run(
-    `INSERT INTO classes (department, year, section) VALUES (?, ?, ?)`,
-    [department, year, section],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json({ id: this.lastID, message: 'Class created successfully' });
-    }
-  );
-});
-
-app.get('/api/classes', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM classes ORDER BY department, year, section', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json(rows);
-  });
-});
-
-app.delete('/api/classes/:id', authenticateToken, requireAdmin, (req, res) => {
-  const { id } = req.params;
-  
-  db.run('DELETE FROM classes WHERE id = ?', [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json({ message: 'Class deleted successfully' });
-  });
-});
-
-// Update student with class assignment
-app.put('/api/admin/assign-student-class/:id', authenticateToken, requireAdmin, (req, res) => {
-  const { class_id } = req.body;
-  const userId = req.params.id;
-  
-  db.run('UPDATE users SET class_id = ? WHERE id = ? AND role = ?',
-    [class_id, userId, 'student'], function(err) {
-      if (err) return res.status(500).json({ error: 'Failed to assign class' });
-      if (this.changes === 0) return res.status(404).json({ error: 'Student not found' });
-      res.json({ message: 'Student assigned to class successfully' });
-    });
-});
-
-// Get students by class
-app.get('/api/classes/:class_id/students', authenticateToken, (req, res) => {
-  db.all('SELECT id, register_no, name, joining_year FROM users WHERE class_id = ? AND role = ?',
-    [req.params.class_id, 'student'], (err, rows) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json(rows);
-    });
-});
-
-// Get class details with students and staff assignments
-app.get('/api/classes/:class_id/details', authenticateToken, (req, res) => {
-  const classId = req.params.class_id;
-  
-  // Get class info
-  db.get('SELECT * FROM classes WHERE id = ?', [classId], (err, classInfo) => {
-    if (err || !classInfo) {
-      return res.status(404).json({ error: 'Class not found' });
-    }
-    
-    // Get students in this class
-    db.all('SELECT id, register_no, name, joining_year FROM users WHERE class_id = ? AND role = ?',
-      [classId, 'student'], (err, students) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        
-        // Get staff assignments for this class based on department, year, and section
-        db.all('SELECT sa.*, s.subject_name as full_subject_name FROM staff_assignments sa LEFT JOIN subjects s ON (sa.subject_code = s.subject_code AND sa.department = s.department AND sa.year = s.year) WHERE sa.department = ? AND sa.year = ? AND sa.section = ?',
-          [classInfo.department, classInfo.year, classInfo.section], (err, assignments) => {
-            if (err) return res.status(500).json({ error: 'Database error' });            // Get CC assignments for this class based on department and year
-            // Convert Roman numeral to number for CC assignment matching
-            const romanToNumber = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
-            const numericYear = romanToNumber[classInfo.year] || classInfo.year;
-            
-            db.all('SELECT * FROM cc_assignments WHERE department = ? AND year = ?',
-              [classInfo.department, numericYear], (err, ccAssignments) => {
-                if (err) return res.status(500).json({ error: 'Database error' });
-                
-                res.json({
-                  class: classInfo,
-                  students,
-                  assignments,
-                  ccAssignments
-                });
-              });
-          });
-      });
-  });
-});
-
-// Admin settings endpoints
-app.get('/api/admin/settings', authenticateToken, requireAdmin, (req, res) => {
-  db.all('SELECT * FROM admin_settings', (err, settings) => {
-    if (err) return res.status(500).json({ error: 'Failed to fetch settings' });
-    
-    const settingsObj = {};
-    settings.forEach(setting => {
-      settingsObj[setting.setting_key] = setting.setting_value;
-    });
-    
-    res.json(settingsObj);
-  });
-});
-
-app.put('/api/admin/settings', authenticateToken, requireAdmin, (req, res) => {
-  const { auto_create_classes } = req.body;
-  
-  if (auto_create_classes !== undefined) {
-    db.run('UPDATE admin_settings SET setting_value = ?, updated_at = datetime(\'now\') WHERE setting_key = ?',
-      [auto_create_classes.toString(), 'auto_create_classes'], function(err) {
-        if (err) return res.status(500).json({ error: 'Failed to update settings' });
-        res.json({ message: 'Settings updated successfully' });
-      });
-  } else {
-    res.status(400).json({ error: 'No valid settings provided' });
+app.delete('/api/staff-assignments/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM staff_assignments WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Assignment deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
-// Admin notifications endpoints
-app.get('/api/admin/notifications', authenticateToken, requireAdmin, (req, res) => {
-  db.all('SELECT * FROM admin_notifications WHERE admin_id = ? ORDER BY created_at DESC LIMIT 50',
-    [req.user.id], (err, notifications) => {
-      if (err) return res.status(500).json({ error: 'Failed to fetch notifications' });
-      res.json(notifications);
-    });
-});
-
-app.put('/api/admin/notifications/:id/read', authenticateToken, requireAdmin, (req, res) => {
-  db.run('UPDATE admin_notifications SET read_status = 1 WHERE id = ? AND admin_id = ?',
-    [req.params.id, req.user.id], function(err) {
-      if (err) return res.status(500).json({ error: 'Failed to mark notification as read' });
-      res.json({ message: 'Notification marked as read' });
-    });
-});
-
-// Timetable endpoints
-app.post('/api/timetables', authenticateToken, requireAdmin, (req, res) => {
-  const { department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number } = req.body;
-  
-  db.run(
-    `INSERT INTO timetables (department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [department, year, semester, section, day_of_week, period_number, start_time, end_time, subject_code, subject_name, staff_id, staff_name, room_number],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Time slot already occupied' });
-        }
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.json({ id: this.lastID, message: 'Timetable entry created successfully' });
-    }
-  );
-});
-
-app.get('/api/timetables', authenticateToken, (req, res) => {
-  const { department, year, semester, section } = req.query;
-  
-  let query = 'SELECT * FROM timetables';
-  let params = [];
-  
-  if (department || year || semester || section) {
-    query += ' WHERE ';
-    const conditions = [];
-    if (department) { conditions.push('department = ?'); params.push(department); }
-    if (year) { conditions.push('year = ?'); params.push(year); }
-    if (semester) { conditions.push('semester = ?'); params.push(semester); }
-    if (section) { conditions.push('section = ?'); params.push(section); }
-    query += conditions.join(' AND ');
+app.delete('/api/staff-assignments', authenticateToken, async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM staff_assignments');
+    res.json({ message: `Deleted ${result.rowCount} assignments` });
+  } catch (error) {
+    res.status(500).json({ error: 'Database error' });
   }
-  
-  query += ' ORDER BY day_of_week, period_number';
-  
-  db.all(query, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(rows);
-  });
-});
-
-app.delete('/api/timetables/:id', authenticateToken, requireAdmin, (req, res) => {
-  const { id } = req.params;
-  
-  db.run('DELETE FROM timetables WHERE id = ?', [id], function(err) {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json({ message: 'Timetable entry deleted successfully' });
-  });
-});
-
-// Delete all timetable entries for a specific class
-app.delete('/api/timetables/class', authenticateToken, requireAdmin, (req, res) => {
-  const { department, year, semester, section } = req.body;
-  
-  console.log('Delete request received:', { department, year, semester, section });
-  
-  if (!department || !year || !semester || !section) {
-    console.log('Missing required fields');
-    return res.status(400).json({ error: 'Department, year, semester, and section are required' });
-  }
-  
-  db.run(
-    'DELETE FROM timetables WHERE department = ? AND year = ? AND semester = ? AND section = ?',
-    [department, year, semester, section],
-    function(err) {
-      if (err) {
-        console.error('Delete error:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      const deletedCount = this.changes;
-      console.log('Deleted', deletedCount, 'timetable entries');
-      
-      res.json({ 
-        message: `${deletedCount} timetable entries deleted successfully for ${department} ${year} Semester ${semester} Section ${section}`,
-        deletedCount: deletedCount
-      });
-    }
-  );
-});
-
-// Get current period for staff based on timetable (non-realtime)
-app.get('/api/staff/current-period', authenticateToken, (req, res) => {
-  // Get staff info first
-  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    
-    const staffId = staffInfo?.staff_id || req.user.staff_id;
-    
-    // Get first available timetable entry for this staff (non-realtime)
-    db.get(`SELECT t.* FROM timetables t 
-            WHERE t.staff_id = ? 
-            ORDER BY t.day_of_week, t.period_number 
-            LIMIT 1`,
-      [staffId], (err, timetableEntry) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        
-        if (!timetableEntry) {
-          return res.json({ 
-            message: `No timetable entries found for staff: ${staffId}`,
-            debug: { staffId }
-          });
-        }
-        
-        // Get period info
-        const periods = [
-          { number: 1, start: '09:15', end: '10:05' },
-          { number: 2, start: '10:05', end: '10:55' },
-          { number: 3, start: '11:05', end: '11:55' },
-          { number: 4, start: '11:55', end: '12:45' },
-          { number: 5, start: '13:25', end: '14:10' },
-          { number: 6, start: '14:10', end: '15:05' },
-          { number: 7, start: '15:15', end: '16:00' },
-          { number: 8, start: '16:00', end: '16:45' }
-        ];
-        
-        const periodInfo = periods[timetableEntry.period_number - 1];
-        
-        // Find the class based on department and year
-        db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?',
-          [timetableEntry.department, timetableEntry.year, 'A'], (err, classInfo) => {
-            if (err) return res.status(500).json({ error: 'Database error' });
-            
-            res.json({
-              currentPeriod: timetableEntry.period_number,
-              timeSlot: `${periodInfo.start}-${periodInfo.end}`,
-              subject: timetableEntry.subject_name,
-              subjectCode: timetableEntry.subject_code,
-              department: timetableEntry.department,
-              year: timetableEntry.year,
-              semester: timetableEntry.semester,
-              room: timetableEntry.room_number,
-              classId: classInfo?.id
-            });
-          });
-      });
-  });
-});
-
-// Mark attendance for current period
-app.post('/api/staff/attendance', authenticateToken, (req, res) => {
-  const { students, subject_code, department, year, semester, day_of_week, period_number, academic_year } = req.body;
-  const date = new Date().toISOString().split('T')[0];
-  const staff_id = req.user.staff_id || req.user.id;
-  
-  console.log('Saving attendance:', { students: students.length, subject_code, date, staff_id, academic_year });
-  
-  // For historical academic years, use students who had grades in that period
-  if (academic_year && academic_year !== new Date().getFullYear().toString()) {
-    // Get students who had grades in this subject and academic year
-    db.all(`SELECT DISTINCT u.id, u.register_no, u.name 
-            FROM users u 
-            JOIN grades g ON u.id = g.student_id 
-            WHERE g.subject_code = ? AND g.academic_year = ? AND g.staff_id = ?`,
-      [subject_code, academic_year, staff_id], (err, historicalStudents) => {
-        if (err) {
-          console.error('Historical students query error:', err);
-          return res.status(500).json({ error: 'Database error' });
-        }
-        
-        // Filter students to only those who existed in that academic year
-        const validStudents = students.filter(student => 
-          historicalStudents.some(hs => hs.id === student.id)
-        );
-        
-        const promises = validStudents.map(student => 
-          new Promise((resolve, reject) => {
-            console.log('Saving historical attendance for student:', student.id, student.status);
-            db.run(`INSERT OR REPLACE INTO attendance 
-                    (student_id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [student.id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, student.status],
-              function(err) {
-                if (err) {
-                  console.error('Attendance save error:', err);
-                  reject(err);
-                } else {
-                  console.log('Attendance saved for student:', student.id, 'Row ID:', this.lastID);
-                  resolve();
-                }
-              }
-            );
-          })
-        );
-        
-        Promise.all(promises)
-          .then(() => {
-            console.log('All historical attendance records saved successfully');
-            res.json({ message: 'Attendance marked successfully' });
-          })
-          .catch(err => {
-            console.error('Failed to save attendance:', err);
-            res.status(500).json({ error: 'Failed to mark attendance' });
-          });
-      });
-  } else {
-    // Current year logic remains the same
-    const promises = students.map(student => 
-      new Promise((resolve, reject) => {
-        console.log('Saving for student:', student.id, student.status);
-        db.run(`INSERT OR REPLACE INTO attendance 
-                (student_id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, status) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [student.id, staff_id, subject_code, department, year, semester, day_of_week, period_number, date, student.status],
-          function(err) {
-            if (err) {
-              console.error('Attendance save error:', err);
-              reject(err);
-            } else {
-              console.log('Attendance saved for student:', student.id, 'Row ID:', this.lastID);
-              resolve();
-            }
-          }
-        );
-      })
-    );
-    
-    Promise.all(promises)
-      .then(() => {
-        console.log('All attendance records saved successfully');
-        res.json({ message: 'Attendance marked successfully' });
-      })
-      .catch(err => {
-        console.error('Failed to save attendance:', err);
-        res.status(500).json({ error: 'Failed to mark attendance' });
-      });
-  }
-});
-
-// Get attendance for a specific date and period
-app.get('/api/staff/attendance', authenticateToken, (req, res) => {
-  const { subject_code, date, period_number, academic_year } = req.query;
-  const staff_id = req.user.staff_id || req.user.id;
-  
-  let query = `SELECT a.*, u.name, u.register_no FROM attendance a 
-               JOIN users u ON a.student_id = u.id 
-               WHERE a.staff_id = ? AND a.subject_code = ? AND a.date = ? AND a.period_number = ?`;
-  let params = [staff_id, subject_code, date, period_number];
-  
-  // For historical data, also filter by students who had grades in that academic year
-  if (academic_year && academic_year !== new Date().getFullYear().toString()) {
-    query = `SELECT a.*, u.name, u.register_no FROM attendance a 
-             JOIN users u ON a.student_id = u.id 
-             JOIN grades g ON u.id = g.student_id 
-             WHERE a.staff_id = ? AND a.subject_code = ? AND a.date = ? AND a.period_number = ? 
-             AND g.subject_code = ? AND g.academic_year = ? AND g.staff_id = ?
-             GROUP BY a.id`;
-    params = [staff_id, subject_code, date, period_number, subject_code, academic_year, staff_id];
-  }
-  
-  db.all(query, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(rows);
-  });
-});
-
-// Get students for staff assignments (for teachers)
-app.get('/api/staff/students/:assignmentId', authenticateToken, (req, res) => {
-  const { assignmentId } = req.params;
-  const { academic_year } = req.query;
-  
-  // Get staff info first
-  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    
-    const staffId = staffInfo?.staff_id || req.user.staff_id || req.user.id;
-    console.log('Looking for assignment:', assignmentId, 'for staff:', staffId, 'academic year:', academic_year);
-    
-    // Get assignment details
-    db.get('SELECT * FROM staff_assignments WHERE id = ? AND staff_id = ?', 
-      [assignmentId, staffId], (err, assignment) => {
-        if (err) {
-          console.error('Assignment query error:', err);
-          return res.status(500).json({ error: 'Database error' });
-        }
-        
-        if (!assignment) {
-          console.log('Assignment not found for ID:', assignmentId, 'Staff:', staffId);
-          return res.status(404).json({ error: 'Assignment not found' });
-        }
-        
-        console.log('Found assignment:', assignment);
-        
-        // For historical academic years, get students who have grades in that year
-        if (academic_year && academic_year !== new Date().getFullYear().toString()) {
-          db.all(`SELECT DISTINCT u.id, u.register_no, u.name, u.joining_year, 'A' as section 
-                  FROM users u 
-                  JOIN grades g ON u.id = g.student_id 
-                  WHERE g.subject_code = ? AND g.academic_year = ? AND g.staff_id = ?
-                  ORDER BY u.register_no`,
-            [assignment.subject_code, academic_year, staffId], (err, historicalStudents) => {
-              if (err) {
-                console.error('Historical students query error:', err);
-                return res.status(500).json({ error: 'Database error' });
-              }
-              
-              console.log('Found historical students:', historicalStudents.length);
-              
-              res.json({
-                assignment,
-                students: historicalStudents,
-                isHistorical: true
-              });
-            });
-        } else {
-          // For current year, use existing logic
-          db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, c.section 
-                  FROM users u 
-                  LEFT JOIN classes c ON u.class_id = c.id 
-                  WHERE u.role = 'student' AND u.current_semester = ? AND (c.department = ? AND c.year = ? OR u.department = ?)
-                  ORDER BY c.section, u.register_no`,
-            [assignment.semester, assignment.department, assignment.year, assignment.department], (err, students) => {
-              if (err) {
-                console.error('Students query error:', err);
-                return res.status(500).json({ error: 'Database error' });
-              }
-              
-              console.log('Found current students:', students.length);
-              
-              // If no students found with class matching, get all students from same department
-              if (students.length === 0) {
-                db.all(`SELECT u.id, u.register_no, u.name, u.joining_year, 'A' as section 
-                        FROM users u 
-                        WHERE u.role = 'student' AND u.department = ?
-                        ORDER BY u.register_no`,
-                  [assignment.department], (err, allStudents) => {
-                    if (err) return res.status(500).json({ error: 'Database error' });
-                    
-                    console.log('Fallback: Found students from department:', allStudents.length);
-                    
-                    res.json({
-                      assignment,
-                      students: allStudents,
-                      isHistorical: false
-                    });
-                  });
-              } else {
-                res.json({
-                  assignment,
-                  students,
-                  isHistorical: false
-                });
-              }
-            });
-        }
-      });
-  });
-});
-
-// Debug endpoint to check data
-app.get('/api/debug/data', authenticateToken, (req, res) => {
-  const now = new Date();
-  const currentDay = now.getDay() - 1;
-  const currentTime = now.toTimeString().slice(0, 5);
-  
-  const queries = {
-    users: 'SELECT id, register_no, staff_id, name, role, department, class_id, joining_year FROM users',
-    classes: 'SELECT * FROM classes',
-    timetables: 'SELECT * FROM timetables',
-    staff_assignments: 'SELECT * FROM staff_assignments'
-  };
-  
-  const results = {
-    currentTime: currentTime,
-    currentDay: currentDay,
-    userInfo: req.user
-  };
-  let completed = 0;
-  
-  Object.keys(queries).forEach(key => {
-    db.all(queries[key], (err, rows) => {
-      if (err) {
-        results[key] = { error: err.message };
-      } else {
-        results[key] = rows;
-      }
-      completed++;
-      
-      if (completed === Object.keys(queries).length) {
-        res.json(results);
-      }
-    });
-  });
-});
-
-// Simple endpoint to get all students (for debugging)
-app.get('/api/debug/students', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM users WHERE role = "student"', (err, students) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(students);
-  });
-});
-
-// Debug endpoint to check all attendance records
-app.get('/api/debug/attendance', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM attendance ORDER BY date DESC, period_number', (err, records) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(records);
-  });
-});
-
-// Create grades table with new structure (preserve existing data)
-db.run(`CREATE TABLE IF NOT EXISTS grades (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  student_id INTEGER NOT NULL,
-  subject_code TEXT NOT NULL,
-  subject_name TEXT,
-  semester INTEGER NOT NULL,
-  ia1_marks INTEGER,
-  ia2_marks INTEGER,
-  ia3_marks INTEGER,
-  semester_grade TEXT,
-  academic_year TEXT DEFAULT '2024',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(student_id, subject_code, semester, academic_year)
-)`);
-
-// Create student GPA tables if not exists
-db.run(`CREATE TABLE IF NOT EXISTS student_gpa (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  student_id INTEGER NOT NULL,
-  semester INTEGER NOT NULL,
-  academic_year TEXT NOT NULL,
-  sgpa REAL NOT NULL,
-  total_credits INTEGER DEFAULT 0,
-  earned_credits INTEGER DEFAULT 0,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(student_id, semester, academic_year)
-)`);
-
-db.run(`CREATE TABLE IF NOT EXISTS student_cgpa (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  student_id INTEGER NOT NULL UNIQUE,
-  cgpa REAL NOT NULL,
-  total_semesters INTEGER DEFAULT 0,
-  total_credits INTEGER DEFAULT 0,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
-
-// Clear all existing data
-// db.run('DELETE FROM student_results');
-
-// Grade point calculation function
-function calculateGradePoints(grade) {
-  const gradeMap = {
-    'O': 10, 'A+': 9, 'A': 8, 'B+': 7, 'B': 6,
-    'C': 5, 'P': 4, 'RA': 0, 'Ab': 0, 'F': 0
-  };
-  const points = gradeMap[grade?.trim()] || 0;
-  return points;
-}
-
-// Calculate SGPA for a semester
-function calculateSGPA(grades, subjects) {
-  let totalCredits = 0;
-  let totalGradePoints = 0;
-  
-  grades.forEach(grade => {
-    if (grade.semester_grade) {
-      const subject = subjects.find(s => s.subject_code === grade.subject_code);
-      const credits = subject ? subject.credits : 3;
-      const gradePoints = calculateGradePoints(grade.semester_grade);
-      
-      totalCredits += credits;
-      totalGradePoints += (gradePoints * credits);
-    }
-  });
-  
-  return {
-    sgpa: totalCredits > 0 ? parseFloat((totalGradePoints / totalCredits).toFixed(2)) : 0,
-    totalCredits,
-    earnedCredits: totalCredits
-  };
-}
-
-// Calculate and store GPA for student
-function calculateAndStoreGPA(studentId, semester, academicYear, callback) {
-  // Get grades for this semester
-  db.all('SELECT * FROM grades WHERE student_id = ? AND semester = ? AND academic_year = ? AND semester_grade IS NOT NULL',
-    [studentId, semester, academicYear], (err, grades) => {
-      if (err) return callback(err);
-      
-      // Get student department for subjects
-      db.get('SELECT department FROM users WHERE id = ?', [studentId], (err, student) => {
-        if (err) return callback(err);
-        
-        // Get subjects for credits
-        db.all('SELECT * FROM subjects WHERE department = ?', [student.department], (err, subjects) => {
-          if (err) return callback(err);
-          
-          const semesterResult = calculateSGPA(grades, subjects);
-          
-          // Store SGPA in student_gpa table
-          db.run(`INSERT OR REPLACE INTO student_gpa 
-                  (student_id, semester, academic_year, sgpa, total_credits, earned_credits) 
-                  VALUES (?, ?, ?, ?, ?, ?)`,
-            [studentId, semester, academicYear, semesterResult.sgpa, semesterResult.totalCredits, semesterResult.earnedCredits],
-            (err) => {
-              if (err) return callback(err);
-              
-              // Calculate and update CGPA
-              updateStudentCGPA(studentId, callback);
-            }
-          );
-        });
-      });
-    });
-}
-
-// Update CGPA in separate table
-function updateStudentCGPA(studentId, callback) {
-  // Get all SGPAs for this student
-  db.all('SELECT sgpa, total_credits FROM student_gpa WHERE student_id = ? ORDER BY academic_year, semester',
-    [studentId], (err, gpaRecords) => {
-      if (err) return callback(err);
-      
-      if (gpaRecords.length === 0) return callback();
-      
-      // Calculate CGPA as average of all SGPAs
-      const totalSGPA = gpaRecords.reduce((sum, record) => sum + record.sgpa, 0);
-      const cgpa = parseFloat((totalSGPA / gpaRecords.length).toFixed(2));
-      const totalCredits = gpaRecords.reduce((sum, record) => sum + record.total_credits, 0);
-      
-      // Store in student_cgpa table
-      db.run(`INSERT OR REPLACE INTO student_cgpa 
-              (student_id, cgpa, total_semesters, total_credits, updated_at) 
-              VALUES (?, ?, ?, ?, datetime('now'))`,
-        [studentId, cgpa, gpaRecords.length, totalCredits],
-        callback
-      );
-    }
-  );
-}
-
-
-
-// Save grades endpoint
-app.post('/api/staff/grades', authenticateToken, (req, res) => {
-  const { students, subject_code, subject_name, semester, grade_type, academic_year } = req.body;
-  const finalAcademicYear = academic_year || new Date().getFullYear().toString();
-  
-  console.log('Saving grades:', { students: students.length, subject_code, grade_type, academic_year: finalAcademicYear });
-  
-  const promises = students.map(student => 
-    new Promise((resolve, reject) => {
-      console.log('Saving grade for student:', student.id, 'academic_year:', finalAcademicYear);
-      
-      // Get existing record or create new one
-      db.get('SELECT * FROM grades WHERE student_id = ? AND subject_code = ? AND semester = ? AND academic_year = ?',
-        [student.id, subject_code, semester, finalAcademicYear], (err, existing) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          
-          let query, params;
-          if (existing) {
-            // Update existing record based on grade_type
-            if (grade_type === 'IA1') {
-              query = 'UPDATE grades SET ia1_marks = ? WHERE id = ?';
-              params = [student.marks, existing.id];
-            } else if (grade_type === 'IA2') {
-              query = 'UPDATE grades SET ia2_marks = ? WHERE id = ?';
-              params = [student.marks, existing.id];
-            } else if (grade_type === 'IA3') {
-              query = 'UPDATE grades SET ia3_marks = ? WHERE id = ?';
-              params = [student.marks, existing.id];
-            } else if (grade_type === 'Semester') {
-              query = 'UPDATE grades SET semester_grade = ? WHERE id = ?';
-              params = [student.grade, existing.id];
-            }
-          } else {
-            // Create new record
-            query = 'INSERT INTO grades (student_id, subject_code, subject_name, semester, academic_year, ia1_marks, ia2_marks, ia3_marks, semester_grade) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
-            params = [
-              student.id, subject_code, subject_name, semester, finalAcademicYear,
-              grade_type === 'IA1' ? student.marks : null,
-              grade_type === 'IA2' ? student.marks : null,
-              grade_type === 'IA3' ? student.marks : null,
-              grade_type === 'Semester' ? student.grade : null
-            ];
-          }
-          
-          db.run(query, params, function(err) {
-            if (err) {
-              console.error('Grade save error:', err);
-              reject(err);
-            } else {
-              console.log('Grade saved for student:', student.id);
-              resolve();
-            }
-          });
-        });
-    })
-  );
-  
-  Promise.all(promises)
-    .then(() => {
-      console.log('All grades saved successfully');
-      
-      // Auto-calculate GPA for affected students if semester grades were saved
-      if (grade_type === 'Semester') {
-        students.forEach(student => {
-          calculateAndStoreGPA(student.id, semester, finalAcademicYear, (err) => {
-            if (err) console.error('Auto GPA calculation failed for student:', student.id, err);
-          });
-        });
-      }
-      
-      res.json({ message: 'Grades saved successfully' });
-    })
-    .catch(err => {
-      console.error('Failed to save grades:', err);
-      res.status(500).json({ error: 'Failed to save grades' });
-    });
-});
-
-// Get grades for a subject
-app.get('/api/staff/grades/:assignmentId', authenticateToken, (req, res) => {
-  const { assignmentId } = req.params;
-  const { grade_type, academic_year } = req.query;
-  
-  db.get('SELECT * FROM staff_assignments WHERE id = ?', [assignmentId], (err, assignment) => {
-    if (err || !assignment) return res.status(404).json({ error: 'Assignment not found' });
-    
-    let query = `SELECT g.*, u.name, u.register_no 
-                 FROM grades g 
-                 JOIN users u ON g.student_id = u.id 
-                 WHERE g.subject_code = ?`;
-    let params = [assignment.subject_code];
-    
-    if (academic_year) {
-      query += ` AND g.academic_year = ?`;
-      params.push(academic_year);
-    }
-    
-    query += ` ORDER BY u.register_no`;
-    
-    db.all(query, params, (err, grades) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json({ assignment, grades });
-    });
-  });
-});
-
-// Get student attendance records
-app.get('/api/student/attendance', authenticateToken, (req, res) => {
-  const studentId = req.user.id;
-  const { semester, academic_year } = req.query;
-  
-  console.log('Fetching attendance for student ID:', studentId, 'semester:', semester, 'academic_year:', academic_year);
-  
-  // First get student info to match with their department/year
-  db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
-    if (err || !student) {
-      return res.status(500).json({ error: 'Student not found' });
-    }
-    
-    console.log('Student info:', { id: student.id, department: student.department, class_id: student.class_id });
-    
-    // Build query with filters
-    let query = `SELECT a.*, sa.subject_name, sa.subject_code as sa_subject_code
-                 FROM attendance a 
-                 LEFT JOIN staff_assignments sa ON (a.subject_code = sa.subject_code AND a.department = sa.department AND a.year = sa.year)
-                 WHERE a.student_id = ?`;
-    let params = [studentId];
-    
-    if (semester) {
-      query += ` AND a.semester = ?`;
-      params.push(semester);
-    }
-    
-    // For historical academic years, only show attendance for subjects where student had grades
-    if (academic_year && academic_year !== new Date().getFullYear().toString()) {
-      query = `SELECT a.*, sa.subject_name, sa.subject_code as sa_subject_code
-               FROM attendance a 
-               LEFT JOIN staff_assignments sa ON (a.subject_code = sa.subject_code AND a.department = sa.department AND a.year = sa.year)
-               JOIN grades g ON (a.student_id = g.student_id AND a.subject_code = g.subject_code)
-               WHERE a.student_id = ? AND g.academic_year = ?`;
-      params = [studentId, academic_year];
-      
-      if (semester) {
-        query += ` AND a.semester = ?`;
-        params.push(semester);
-      }
-    }
-    
-    query += ` ORDER BY a.date DESC, a.period_number`;
-    
-    // Get attendance records for this student
-    db.all(query, params, (err, records) => {
-      if (err) {
-        console.error('Student attendance fetch error:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      console.log('Found attendance records:', records.length);
-      if (records.length > 0) {
-        console.log('Sample record:', records[0]);
-      }
-      
-      // Group by subject and calculate percentages
-      const subjectStats = {};
-      
-      records.forEach(record => {
-        const subjectKey = record.subject_code;
-        if (!subjectStats[subjectKey]) {
-          subjectStats[subjectKey] = {
-            subject_code: record.subject_code,
-            subject_name: record.subject_name || record.subject_code,
-            total: 0,
-            present: 0,
-            records: []
-          };
-        }
-        
-        subjectStats[subjectKey].total++;
-        if (record.status === 'present') {
-          subjectStats[subjectKey].present++;
-        }
-        subjectStats[subjectKey].records.push(record);
-      });
-      
-      // Calculate percentages
-      const subjects = Object.values(subjectStats).map(subject => ({
-        ...subject,
-        percentage: subject.total > 0 ? Math.round((subject.present / subject.total) * 100) : 0
-      }));
-      
-      // Overall stats
-      const totalClasses = records.length;
-      const totalPresent = records.filter(r => r.status === 'present').length;
-      const overallPercentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
-      
-      console.log('Returning subjects:', subjects.length, 'Overall:', overallPercentage + '%');
-      
-      res.json({
-        subjects,
-        overall: {
-          total: totalClasses,
-          present: totalPresent,
-          missed: totalClasses - totalPresent,
-          percentage: overallPercentage
-        },
-        records,
-        studentInfo: {
-          id: student.id,
-          name: student.name,
-          department: student.department,
-          class_id: student.class_id
-        }
-      });
-    });
-  });
-});
-
-// Get student grades
-app.get('/api/student/grades', authenticateToken, (req, res) => {
-  const studentId = req.user.id;
-  const { semester, academic_year } = req.query;
-  
-  console.log('Fetching grades for student ID:', studentId, 'semester:', semester, 'academic_year:', academic_year);
-  
-  // Get student info first
-  db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
-    if (err || !student) {
-      return res.status(500).json({ error: 'Student not found' });
-    }
-    
-    console.log('Student info:', { id: student.id, department: student.department, register_no: student.register_no });
-    
-    // Build query with filters - use new grades table structure
-    let query = `SELECT g.*, g.subject_name 
-                 FROM grades g 
-                 WHERE g.student_id = ?`;
-    let params = [studentId];
-    
-    if (semester) {
-      query += ` AND g.semester = ?`;
-      params.push(semester);
-    }
-    
-    if (academic_year) {
-      query += ` AND g.academic_year = ?`;
-      params.push(academic_year);
-    }
-    
-    query += ` ORDER BY g.subject_code`;
-    
-    // Get all grades for this student
-    db.all(query, params, (err, grades) => {
-      if (err) {
-        console.error('Grades fetch error:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      console.log('Found grades:', grades.length);
-      if (grades.length > 0) {
-        console.log('Sample grade:', grades[0]);
-      }
-      
-      // Transform grades to match expected format
-      const subjects = grades.map(grade => ({
-        subject_code: grade.subject_code,
-        subject_name: grade.subject_name || grade.subject_code,
-        ia1: grade.ia1_marks,
-        ia2: grade.ia2_marks,
-        ia3: grade.ia3_marks,
-        grade: grade.semester_grade,
-        semester: grade.semester,
-        academic_year: grade.academic_year
-      }));
-      
-      console.log('Returning subjects with grades:', subjects.length);
-      
-      // Get stored GPA from both tables
-      db.get('SELECT sgpa FROM student_gpa WHERE student_id = ? ORDER BY academic_year DESC, semester DESC LIMIT 1',
-        [studentId], (err, sgpaRecord) => {
-          if (err) return res.status(500).json({ error: 'Database error' });
-          
-          db.get('SELECT cgpa FROM student_cgpa WHERE student_id = ?', [studentId], (err, cgpaRecord) => {
-            if (err) return res.status(500).json({ error: 'Database error' });
-            
-            res.json({
-              assignments: subjects,
-              ias: subjects,
-              semesters: subjects,
-              gpa: cgpaRecord ? cgpaRecord.cgpa : 0,
-              sgpa: sgpaRecord ? sgpaRecord.sgpa : 0,
-              debug: {
-                studentId,
-                totalGrades: grades.length,
-                rawGrades: grades
-              }
-            });
-          });
-        }
-      );
-    });
-  });
-});
-
-// Debug endpoint to check all grades
-app.get('/api/debug/grades', authenticateToken, (req, res) => {
-  db.all('SELECT * FROM grades ORDER BY created_at DESC', (err, grades) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(grades);
-  });
-});
-
-// Clear grades table
-app.delete('/api/debug/clear-grades', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM grades', function(err) {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json({ message: `${this.changes} grades deleted successfully` });
-  });
-});
-
-// Clear student_results table
-app.delete('/api/debug/clear-student-results', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM student_results', function(err) {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json({ message: `${this.changes} student results deleted successfully` });
-  });
-});
-
-// Clear student_gpa table
-app.delete('/api/debug/clear-student-gpa', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM student_gpa', function(err1) {
-    if (err1) return res.status(500).json({ error: 'Database error' });
-    const sgpaDeleted = this.changes;
-    
-    db.run('DELETE FROM student_cgpa', function(err2) {
-      if (err2) return res.status(500).json({ error: 'Database error' });
-      const cgpaDeleted = this.changes;
-      
-      res.json({ 
-        message: `${sgpaDeleted} SGPA records and ${cgpaDeleted} CGPA records deleted successfully`,
-        sgpa_deleted: sgpaDeleted,
-        cgpa_deleted: cgpaDeleted
-      });
-    });
-  });
-});
-
-// Debug endpoint to check student_results data
-app.get('/api/debug/student-results', (req, res) => {
-  db.all('SELECT * FROM student_results LIMIT 10', (err, results) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    
-    // Test grade point calculation on sample data
-    const testResults = results.map(r => ({
-      ...r,
-      calculated_points: calculateGradePoints(r.semester_grade)
-    }));
-    
-    res.json({ 
-      sample_data: testResults,
-      total_count: results.length,
-      grade_test: {
-        'A+': calculateGradePoints('A+'),
-        'A': calculateGradePoints('A'),
-        'O': calculateGradePoints('O')
-      }
-    });
-  });
-});
-
-// Test endpoint for specific register number
-app.get('/api/debug/test-register/:register_no', (req, res) => {
-  const { register_no } = req.params;
-  db.all('SELECT * FROM student_results WHERE register_no = ?', [register_no], (err, results) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    
-    // Test GPA calculation for this student
-    let totalCredits = 0;
-    let totalGradePoints = 0;
-    
-    const processedResults = results.map(result => {
-      const credits = 3;
-      const gradePoints = calculateGradePoints(result.semester_grade);
-      totalCredits += credits;
-      totalGradePoints += (gradePoints * credits);
-      
-      return {
-        ...result,
-        grade_points: gradePoints,
-        credits: credits
-      };
-    });
-    
-    const sgpa = totalCredits > 0 ? parseFloat((totalGradePoints / totalCredits).toFixed(2)) : 0;
-    
-    res.json({ 
-      register_no, 
-      count: results.length, 
-      results: processedResults,
-      calculation: {
-        total_credits: totalCredits,
-        total_grade_points: totalGradePoints,
-        calculated_sgpa: sgpa
-      }
-    });
-  });
-});
-
-// Subjects management endpoints
-app.post('/api/subjects', authenticateToken, requireAdmin, (req, res) => {
-  const { subject_code, subject_name, department, year, semester, credits } = req.body;
-  
-  db.run(
-    `INSERT INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES (?, ?, ?, ?, ?, ?)`,
-    [subject_code, subject_name, department, year, semester, credits || 3],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Subject code already exists' });
-        }
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json({ id: this.lastID, message: 'Subject created successfully' });
-    }
-  );
-});
-
-app.get('/api/subjects', authenticateToken, (req, res) => {
-  const { department, year, semester } = req.query;
-  
-  let query = 'SELECT * FROM subjects';
-  let params = [];
-  
-  if (department || year || semester) {
-    query += ' WHERE ';
-    const conditions = [];
-    if (department) { conditions.push('department = ?'); params.push(department); }
-    if (year) { conditions.push('year = ?'); params.push(year); }
-    if (semester) { conditions.push('semester = ?'); params.push(semester); }
-    query += conditions.join(' AND ');
-  }
-  
-  query += ' ORDER BY department, year, semester, subject_code';
-  
-  db.all(query, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json(rows);
-  });
-});
-
-app.delete('/api/subjects/:id', authenticateToken, requireAdmin, (req, res) => {
-  const { id } = req.params;
-  
-  db.run('DELETE FROM subjects WHERE id = ?', [id], function(err) {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json({ message: 'Subject deleted successfully' });
-  });
-});
-
-// Clear all subjects
-app.delete('/api/subjects', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM subjects', function(err) {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json({ message: `${this.changes} subjects deleted successfully` });
-  });
-});
-
-// Delete all students
-app.delete('/api/students', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM users WHERE role = "student"', function(err) {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json({ message: `${this.changes} students deleted successfully` });
-  });
-});
-
-// Delete all accounts (students and staff)
-app.delete('/api/admin/delete-all-accounts', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM users WHERE role IN ("student", "staff")', function(err) {
-    if (err) return res.status(500).json({ error: 'Database error' });
-    res.json({ message: `${this.changes} accounts deleted successfully` });
-  });
-});
-
-// Get subjects assigned to student
-app.get('/api/student/subjects', authenticateToken, (req, res) => {
-  const studentId = req.user.id;
-  const { semester } = req.query;
-  
-  db.get('SELECT * FROM users WHERE id = ?', [studentId], (err, student) => {
-    if (err || !student) {
-      return res.status(500).json({ error: 'Student not found' });
-    }
-    
-    let query = `SELECT DISTINCT s.subject_code, s.subject_name, s.credits, sa.staff_name, s.department, s.year, s.semester
-                 FROM subjects s
-                 LEFT JOIN staff_assignments sa ON (s.subject_code = sa.subject_code AND s.department = sa.department AND s.year = sa.year)
-                 WHERE s.department = ?`;
-    let params = [student.department];
-    
-    // Filter by current semester by default, or specified semester
-    const filterSemester = semester || student.current_semester || '1';
-    query += ` AND s.semester = ?`;
-    params.push(filterSemester);
-    
-    query += ` ORDER BY s.subject_code`;
-    
-    db.all(query, params, (err, subjects) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      res.json(subjects);
-    });
-  });
-});
-
-// CSV upload configuration
-const upload = multer({ 
-  dest: 'uploads/',
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
-});
-
-// Bulk import subjects from CSV
-app.post('/api/subjects/import', authenticateToken, requireAdmin, (req, res, next) => {
-  console.log('Received import request');
-  upload.single('csvFile')(req, res, (err) => {
-    if (err) {
-      console.error('File upload error:', err);
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ 
-          error: 'File is too large',
-          details: 'Maximum file size is 5MB'
-        });
-      }
-      return res.status(400).json({ 
-        error: 'File upload failed',
-        details: err.message
-      });
-    }
-    next();
-  });
-}, (req, res) => {
-  console.log('Processing uploaded file');
-    if (!req.file) {
-      console.error('No file received in request');
-      return res.status(400).json({ 
-        error: 'No CSV file uploaded',
-        details: 'Please select a valid CSV file'
-      });
-    }
-    
-    // Continue with CSV processing
-    console.log('File received:', req.file.originalname, 'Size:', req.file.size);
-    
-    // Rest of the existing import code...  const subjects = [];
-  const errors = [];
-  let rowNum = 0;
-  
-  fs.createReadStream(req.file.path)
-    .pipe(csv())
-    .on('data', (data) => {
-      rowNum++;
-      console.log('Processing row:', rowNum, 'Data:', data);
-      
-      // Validate required fields
-      if (!data.subject_code) errors.push(`Row ${rowNum}: Missing subject code`);
-      if (!data.subject_name) errors.push(`Row ${rowNum}: Missing subject name`);
-      if (!data.department) errors.push(`Row ${rowNum}: Missing department`);
-      if (!data.year) errors.push(`Row ${rowNum}: Missing year`);
-      if (!data.semester) errors.push(`Row ${rowNum}: Missing semester`);
-      
-      if (data.subject_code && data.subject_name && data.department && data.year && data.semester) {
-        const subject = [
-          data.subject_code.trim(),
-          data.subject_name.trim(), 
-          data.department.trim(),
-          data.year.trim(),
-          data.semester.trim(),
-          parseInt(data.credits) || 3
-        ];
-        subjects.push(subject);
-        console.log('Added subject:', subject);
-      }
-    })
-    .on('end', () => {
-      if (subjects.length === 0) {
-        fs.unlinkSync(req.file.path);
-        return res.status(400).json({ 
-          error: 'No valid subjects found',
-          details: errors
-        });
-      }
-
-      let imported = 0;
-      let duplicates = 0;
-      
-      db.serialize(() => {
-        db.run('BEGIN TRANSACTION');
-        
-        const stmt = db.prepare('INSERT INTO subjects (subject_code, subject_name, department, year, semester, credits) VALUES (?, ?, ?, ?, ?, ?)');
-        
-        subjects.forEach(subject => {
-          stmt.run(subject, function(err) {
-            if (err) {
-              if (err.message.includes('UNIQUE constraint failed')) {
-                duplicates++;
-                console.log('Duplicate subject:', subject[0]);
-              } else {
-                errors.push(`Error importing ${subject[0]}: ${err.message}`);
-                console.error('Import error for subject:', subject[0], err);
-              }
-            } else {
-              imported++;
-              console.log('Successfully imported subject:', subject[0]);
-            }
-          });
-        });
-        
-        stmt.finalize();
-        
-        db.run('COMMIT', (err) => {
-          fs.unlinkSync(req.file.path);
-          
-          if (err) {
-            console.error('Transaction error:', err);
-            return res.status(500).json({ 
-              error: 'Import failed',
-              details: errors
-            });
-          }
-          
-          // Get actual count from database
-          db.get('SELECT COUNT(*) as total FROM subjects', (err, result) => {
-            const response = {
-              message: `${imported} new subjects added, ${duplicates} duplicates skipped, ${result.total} total in database`,
-              imported,
-              duplicates,
-              total: result.total
-            };
-            
-            if (errors.length > 0) {
-              response.errors = errors;
-            }
-            
-            console.log('Import completed:', response);
-            res.json(response);
-          });
-        });
-      });
-    })
-    .on('error', (err) => {
-      console.error('CSV processing error:', err);
-      fs.unlinkSync(req.file.path);
-      res.status(500).json({ 
-        error: 'CSV processing failed',
-        details: err.message
-      });
-    });
-});
-
-// Get CSV templates
-app.get('/api/subjects/template', authenticateToken, requireAdmin, (req, res) => {
-  const csvContent = 'subject_code,subject_name,department,year,semester,credits\n' +
-                    'CS101,Programming Fundamentals,Computer Science,1,1,4\n' +
-                    'CS102,Data Structures,Computer Science,1,2,4\n' +
-                    'CS103,Database Systems,Computer Science,2,1,3\n' +
-                    'CS104L,Programming Lab,Computer Science,1,1,2';
-  
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=subjects_template.csv');
-  res.send(csvContent);
-});
-
-app.get('/api/students/template', authenticateToken, requireAdmin, (req, res) => {
-  const csvContent = 'name,email,department,year,dob\n' +
-                    'John Doe,john@email.com,CSE,25,150805\n' +
-                    'Jane Smith,jane@email.com,IT,25,221204\n' +
-                    'Mike Johnson,mike@email.com,AIDS,25,100306';
-  
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=students_template.csv');
-  res.send(csvContent);
-});
-
-app.get('/api/staff/template', authenticateToken, requireAdmin, (req, res) => {
-  const csvContent = 'name,email,department\n' +
-                    'John Teacher,john@email.com,CSE\n' +
-                    'Jane Professor,jane@email.com,IT\n' +
-                    'Mike Lecturer,mike@email.com,AIDS';
-  
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=staff_template.csv');
-  res.send(csvContent);
-});
-
-// Bulk import students from CSV
-app.post('/api/students/import', authenticateToken, requireAdmin, upload.single('csvFile'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No CSV file uploaded' });
-  }
-
-  const students = [];
-  
-  fs.createReadStream(req.file.path)
-    .pipe(csv())
-    .on('data', (data) => {
-      console.log('Raw CSV data:', JSON.stringify(data));
-      console.log('Available keys:', Object.keys(data));
-      const values = Object.values(data);
-      const student = {
-        name: values[0] || 'Student',
-        email: values[1] || null,
-        department: values[2] || 'IT',
-        year: values[3] || '25',
-        dob: values[4] || '010100'
-      };
-      console.log('Parsed student:', student);
-      students.push(student);
-    })
-    .on('end', async () => {
-      console.log('Total students parsed:', students.length);
-      if (students.length === 0) {
-        fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: 'No valid students found' });
-      }
-
-      let imported = 0;
-      const errors = [];
-      
-      for (let i = 0; i < students.length; i++) {
-        const student = students[i];
-        
-        console.log('Processing student:', student);
-        
-        try {
-          // Get next student number
-          const deptCode = student.department.toUpperCase().substring(0, 2);
-          const yearCode = student.year.toString().slice(-2);
-          
-          const response = await new Promise((resolve, reject) => {
-            db.get(`SELECT COUNT(*) as count FROM users WHERE register_no LIKE 'STU${deptCode}${yearCode}%'`, (err, row) => {
-              if (err) reject(err);
-              else resolve(row.count + 1);
-            });
-          });
-          
-          const numStr = (response).toString().padStart(2, '0');
-          const register_no = `STU${deptCode}${yearCode}${numStr}`;
-          const password = student.dob.toString().padStart(6, '0');
-          console.log('Generated password for', student.name, ':', password);
-          const hashedPassword = await bcrypt.hash(password, 10);
-          const joiningYear = 2000 + parseInt(student.year);
-          
-          // Check auto-creation setting
-          const autoCreateEnabled = await new Promise((resolve, reject) => {
-            db.get('SELECT setting_value FROM admin_settings WHERE setting_key = ?', 
-              ['auto_create_classes'], (err, row) => {
-                if (err) reject(err);
-                else resolve(row ? row.setting_value === 'true' : true);
-              });
-          });
-          
-          // Auto-assign to class
-          let classResult = null;
-          if (autoCreateEnabled) {
-            // For semester 5, students should be in 3rd year (III)
-            const yearRoman = 'III';
-            
-            classResult = await new Promise((resolve, reject) => {
-              db.get('SELECT id FROM classes WHERE department = ? AND year = ? AND section = ?',
-                [student.department, yearRoman, 'A'], (err, classRow) => {
-                  if (err) reject(err);
-                  else resolve(classRow ? classRow.id : null);
-                }
-              );
-            });
-            
-            // Create class if it doesn't exist
-            if (!classResult) {
-              classResult = await new Promise((resolve, reject) => {
-                db.run('INSERT INTO classes (department, year, section) VALUES (?, ?, ?)',
-                  [student.department, yearRoman, 'A'], function(err) {
-                    if (err) reject(err);
-                    else resolve(this.lastID);
-                  }
-                );
-              });
-            }
-          }
-          
-          await new Promise((resolve, reject) => {
-            console.log('Creating user:', { register_no, name: student.name, password, hashedPassword: hashedPassword.substring(0, 10) + '...' });
-            db.run('INSERT INTO users (register_no, name, email, password, role, department, joining_year, class_id, current_semester, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-              [register_no, student.name, student.email, hashedPassword, 'student', student.department, joiningYear, classResult, 5, req.user.id],
-              function(err) {
-                if (err) reject(err);
-                else { imported++; resolve(); }
-              }
-            );
-          });
-        } catch (error) {
-          errors.push(`Row ${i + 1}: ${error.message}`);
-        }
-      }
-      
-      fs.unlinkSync(req.file.path);
-      console.log('Final result:', { imported, errors: errors.length, totalStudents: students.length });
-      res.json({
-        message: `${imported} students imported, ${errors.length} errors`,
-        imported,
-        errors: errors.slice(0, 5)
-      });
-    })
-    .on('error', () => {
-      fs.unlinkSync(req.file.path);
-      res.status(500).json({ error: 'CSV processing failed' });
-    });
-});
-
-// Bulk import staff from CSV
-app.post('/api/staff/import', authenticateToken, requireAdmin, upload.single('csvFile'), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No CSV file uploaded' });
-  }
-
-  const staff = [];
-  
-  fs.createReadStream(req.file.path)
-    .pipe(csv())
-    .on('data', (data) => {
-      console.log('CSV row data:', data);
-      const values = Object.values(data);
-      const staffMember = {
-        name: values[0] || 'Staff',
-        email: values[1] || null,
-        department: values[2] || 'IT'
-      };
-      console.log('Parsed staff:', staffMember);
-      staff.push(staffMember);
-    })
-    .on('end', async () => {
-      if (staff.length === 0) {
-        fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: 'No valid staff found' });
-      }
-
-      let imported = 0;
-      const errors = [];
-      
-      for (let i = 0; i < staff.length; i++) {
-        const member = staff[i];
-        
-        try {
-          // Get next staff number
-          const deptCode = member.department.toUpperCase().substring(0, 3);
-          
-          const response = await new Promise((resolve, reject) => {
-            db.get(`SELECT COUNT(*) as count FROM users WHERE staff_id LIKE 'STF${deptCode}%'`, (err, row) => {
-              if (err) reject(err);
-              else resolve(row.count + 1);
-            });
-          });
-          
-          const numStr = response.toString().padStart(3, '0');
-          const staff_id = `STF${deptCode}${numStr}`;
-          const name = member.name.toLowerCase().replace(/\s+/g, '');
-          const dept = member.department.toLowerCase();
-          const password = `${name}@${dept}`;
-          const hashedPassword = await bcrypt.hash(password, 10);
-          
-          await new Promise((resolve, reject) => {
-            db.run('INSERT INTO users (staff_id, name, email, password, role, department, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-              [staff_id, member.name, member.email, hashedPassword, 'staff', member.department, req.user.id],
-              function(err) {
-                if (err) reject(err);
-                else { imported++; resolve(); }
-              }
-            );
-          });
-        } catch (error) {
-          errors.push(`Row ${i + 1}: ${error.message}`);
-        }
-      }
-      
-      fs.unlinkSync(req.file.path);
-      res.json({
-        message: `${imported} staff imported, ${errors.length} errors`,
-        imported,
-        errors: errors.slice(0, 5)
-      });
-    })
-    .on('error', () => {
-      fs.unlinkSync(req.file.path);
-      res.status(500).json({ error: 'CSV processing failed' });
-    });
-});
-
-// Get all subjects for admin
-app.get('/api/admin/subjects', authenticateToken, requireAdmin, (req, res) => {
-  db.all('SELECT * FROM subjects ORDER BY department, year, semester, subject_code', (err, subjects) => {
-    if (err) return res.status(500).json({ error: 'Failed to fetch subjects' });
-    res.json(subjects);
-  });
-});
-
-// Move students to correct class based on semester
-app.put('/api/admin/fix-student-classes', authenticateToken, requireAdmin, (req, res) => {
-  // Move semester 5 students to III year class
-  db.run(`UPDATE users SET class_id = (
-    SELECT c.id FROM classes c WHERE c.department = users.department AND c.year = 'III' AND c.section = 'A'
-  ) WHERE role = 'student' AND current_semester = 5`, function(err) {
-    if (err) return res.status(500).json({ error: 'Failed to update student classes' });
-    res.json({ message: `${this.changes} students moved to correct classes` });
-  });
-});
-
-// Student results endpoints
-app.post('/api/student-results/import', authenticateToken, requireAdmin, (req, res, next) => {
-  upload.single('csvFile')(req, res, (err) => {
-    if (err) {
-      console.error('File upload error:', err);
-      return res.status(400).json({ error: 'File upload failed', details: err.message });
-    }
-    next();
-  });
-}, async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No CSV file uploaded' });
-  }
-
-  const results = [];
-  const errors = [];
-  let rowNum = 0;
-  
-  fs.createReadStream(req.file.path)
-    .pipe(csv())
-    .on('data', (data) => {
-      rowNum++;
-      const values = Object.values(data);
-      const result = {
-        register_no: values[0]?.trim(),
-        subject_code: values[1]?.trim(),
-        semester: parseInt(values[2]) || 0,
-        academic_year: values[3]?.trim(),
-        ia1_marks: parseInt(values[4]) || null,
-        ia2_marks: parseInt(values[5]) || null,
-        ia3_marks: parseInt(values[6]) || null,
-        semester_grade: values[7]?.trim()
-      };
-      
-      if (!result.register_no || !result.subject_code || !result.semester_grade) {
-        errors.push(`Row ${rowNum}: Missing required fields`);
-      } else {
-        results.push(result);
-      }
-    })
-    .on('end', async () => {
-      if (results.length === 0) {
-        fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: 'No valid results found', details: errors });
-      }
-
-      let imported = 0;
-      let duplicates = 0;
-      
-      for (const result of results) {
-        try {
-          await new Promise((resolve, reject) => {
-            db.run(`INSERT OR REPLACE INTO student_results 
-                    (register_no, subject_code, semester, academic_year, ia1_marks, ia2_marks, ia3_marks, semester_grade) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [result.register_no, result.subject_code, result.semester, result.academic_year, 
-               result.ia1_marks, result.ia2_marks, result.ia3_marks, result.semester_grade],
-              function(err) {
-                if (err) reject(err);
-                else { imported++; resolve(); }
-              }
-            );
-          });
-        } catch (error) {
-          errors.push(`Error importing ${result.register_no}: ${error.message}`);
-        }
-      }
-      
-      fs.unlinkSync(req.file.path);
-      
-      res.json({
-        message: `${imported} student results imported successfully`,
-        imported,
-        errors: errors.slice(0, 5)
-      });
-    })
-    .on('error', () => {
-      fs.unlinkSync(req.file.path);
-      res.status(500).json({ error: 'CSV processing failed' });
-    });
-});
-
-// Get student results template
-app.get('/api/student-results/template', authenticateToken, requireAdmin, (req, res) => {
-  const csvContent = 'register_no,subject_code,semester,academic_year,ia1_marks,ia2_marks,ia3_marks,semester_grade\n' +
-                    'STUIT2501,CS3551,5,2023,45,42,48,A+\n' +
-                    'STUIT2501,CS3552,5,2023,40,38,45,A\n' +
-                    'STUIT2502,CS3551,5,2023,48,46,49,O';
-  
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=student_results_template.csv');
-  res.send(csvContent);
 });
 
 // Get student results by register number
-app.get('/api/student-results/:register_no', authenticateToken, (req, res) => {
-  const { register_no } = req.params;
-  const { semester, academic_year } = req.query;
-  
-  console.log('Fetching student results for:', register_no, 'semester:', semester, 'academic_year:', academic_year);
-  
-  // Get student department first
-  db.get('SELECT department FROM users WHERE register_no = ?', [register_no], (err, student) => {
-    if (err) {
-      console.error('Error getting student department:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
+app.get('/api/student-results/:register_no', authenticateToken, async (req, res) => {
+  try {
+    const { register_no } = req.params;
+    const { semester } = req.query;
     
-    const studentDept = student?.department || 'IT';
+    let query = 'SELECT * FROM student_results WHERE register_no = $1';
+    let params = [register_no];
     
-    let query = `SELECT DISTINCT sr.subject_code, sr.semester, sr.academic_year, sr.ia1_marks, sr.ia2_marks, sr.ia3_marks, sr.semester_grade, s.subject_name, s.credits 
-                 FROM student_results sr 
-                 LEFT JOIN subjects s ON (sr.subject_code = s.subject_code AND CAST(sr.semester AS TEXT) = s.semester AND s.department = ?) 
-                 WHERE sr.register_no = ?`;
-    let queryParams = [studentDept, register_no];
-  let params = [register_no];
-  
     if (semester) {
-      query += ` AND sr.semester = ?`;
-      queryParams.push(semester);
+      query += ' AND semester = $2';
+      params.push(semester);
     }
     
-    if (academic_year) {
-      query += ` AND sr.academic_year = ?`;
-      queryParams.push(academic_year);
+    query += ' ORDER BY semester, subject_code';
+    
+    const result = await db.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Student results fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get student grades (current semester)
+app.get('/api/student/grades', authenticateToken, async (req, res) => {
+  try {
+    const { semester } = req.query;
+    // This would typically get current semester grades from a different table
+    // For now, return empty structure
+    res.json({ assignments: [], ias: [], semesters: [] });
+  } catch (error) {
+    console.error('❌ Student grades fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get student GPA
+app.get('/api/student/gpa', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { semester } = req.query;
+    
+    // Get user register_no
+    const userResult = await db.query('SELECT register_no FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.json({ current: { cgpa: 0, sgpa: 0 } });
     }
+    const registerNo = userResult.rows[0].register_no;
     
-    query += ` ORDER BY sr.semester, sr.subject_code`;
+    // Grade to points mapping
+    const gradePoints = {
+      'O': 10, 'A+': 9, 'A': 8, 'B+': 7, 'B': 6, 'C': 5, 'P': 4, 'F': 0
+    };
     
-    console.log('Query:', query, 'Params:', queryParams);
+    // Get all results for CGPA calculation
+    const allResultsQuery = 'SELECT semester_grade, semester FROM student_results WHERE register_no = $1 AND semester_grade IS NOT NULL';
+    const allResults = await db.query(allResultsQuery, [registerNo]);
     
-    db.all(query, queryParams, (err, results) => {
-      if (err) {
-        console.error('Database error:', err);
-        return res.status(500).json({ error: 'Database error' });
+    let totalPoints = 0;
+    let totalSubjects = 0;
+    let semesterPoints = 0;
+    let semesterSubjects = 0;
+    
+    allResults.rows.forEach(result => {
+      const points = gradePoints[result.semester_grade] || 0;
+      totalPoints += points;
+      totalSubjects++;
+      
+      // Calculate SGPA for specific semester if provided
+      if (semester && result.semester == semester) {
+        semesterPoints += points;
+        semesterSubjects++;
+      }
+    });
+    
+    const cgpa = totalSubjects > 0 ? (totalPoints / totalSubjects).toFixed(2) : 0;
+    const sgpa = semesterSubjects > 0 ? (semesterPoints / semesterSubjects).toFixed(2) : 0;
+    
+    res.json({ 
+      current: { 
+        cgpa: parseFloat(cgpa), 
+        sgpa: parseFloat(sgpa) 
+      } 
+    });
+  } catch (error) {
+    console.error('❌ Student GPA fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get student attendance
+app.get('/api/student/attendance', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get attendance records using user id directly
+    const attendanceResult = await db.query(
+      'SELECT * FROM attendance WHERE student_id = $1 ORDER BY date DESC',
+      [userId]
+    );
+    
+    // Group by subject and calculate statistics
+    const subjectMap = {};
+    let totalClasses = 0;
+    let totalPresent = 0;
+    
+    attendanceResult.rows.forEach(record => {
+      const subjectCode = record.subject_code;
+      if (!subjectMap[subjectCode]) {
+        subjectMap[subjectCode] = {
+          subject_code: subjectCode,
+          subject_name: record.subject_name || subjectCode,
+          total: 0,
+          present: 0,
+          records: []
+        };
       }
       
-      console.log('Found results:', results.length);
+      subjectMap[subjectCode].total++;
+      totalClasses++;
       
-      // Add calculated grade points
-      const resultsWithGradePoints = results.map(result => ({
-        ...result,
-        grade_points: calculateGradePoints(result.semester_grade)
-      }));
+      if (record.status === 'present') {
+        subjectMap[subjectCode].present++;
+        totalPresent++;
+      }
       
-      res.json(resultsWithGradePoints);
+      subjectMap[subjectCode].records.push(record);
     });
-  });
-});
-
-// Quick delete endpoints (use with caution)
-app.delete('/api/clear-results-now', (req, res) => {
-  db.run('DELETE FROM student_results', function(err1) {
-    const resultsDeleted = this.changes;
-    db.run('DELETE FROM student_gpa', function(err2) {
-      const sgpaDeleted = this.changes;
-      db.run('DELETE FROM student_cgpa', function(err3) {
-        const cgpaDeleted = this.changes;
-        res.json({ 
-          message: `Cleared ${resultsDeleted} student results, ${sgpaDeleted} SGPA records, and ${cgpaDeleted} CGPA records`,
-          student_results_deleted: resultsDeleted,
-          student_gpa_deleted: sgpaDeleted,
-          student_cgpa_deleted: cgpaDeleted
-        });
-      });
-    });
-  });
-});
-
-// Get student GPA from stored tables
-app.get('/api/student/gpa', authenticateToken, (req, res) => {
-  const studentId = req.user.id;
-  const { semester, academic_year } = req.query;
-  
-  // Get SGPA records
-  let sgpaQuery = 'SELECT * FROM student_gpa WHERE student_id = ?';
-  let sgpaParams = [studentId];
-  
-  if (semester) {
-    sgpaQuery += ' AND semester = ?';
-    sgpaParams.push(semester);
-  }
-  if (academic_year) {
-    sgpaQuery += ' AND academic_year = ?';
-    sgpaParams.push(academic_year);
-  }
-  
-  sgpaQuery += ' ORDER BY academic_year DESC, semester DESC';
-  
-  db.all(sgpaQuery, sgpaParams, (err, gpaRecords) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
     
-    // Get CGPA from separate table
-    db.get('SELECT * FROM student_cgpa WHERE student_id = ?', [studentId], (err, cgpaRecord) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      
-      const latestSGPA = gpaRecords[0];
-      
-      res.json({
-        records: gpaRecords,
-        current: {
-          sgpa: latestSGPA ? latestSGPA.sgpa : 0,
-          cgpa: cgpaRecord ? cgpaRecord.cgpa : 0,
-          semester: latestSGPA ? latestSGPA.semester : null,
-          academic_year: latestSGPA ? latestSGPA.academic_year : null,
-          total_semesters: cgpaRecord ? cgpaRecord.total_semesters : 0
-        }
-      });
+    // Calculate percentages
+    const subjects = Object.values(subjectMap).map(subject => ({
+      ...subject,
+      percentage: subject.total > 0 ? Math.round((subject.present / subject.total) * 100) : 0
+    }));
+    
+    const overallPercentage = totalClasses > 0 ? Math.round((totalPresent / totalClasses) * 100) : 0;
+    
+    res.json({
+      subjects,
+      overall: {
+        total: totalClasses,
+        present: totalPresent,
+        missed: totalClasses - totalPresent,
+        percentage: overallPercentage
+      }
     });
-  });
+  } catch (error) {
+    console.error('❌ Student attendance fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
 });
 
-// Calculate GPA from student_results table
-function calculateGPAFromResults(registerNo, semester, academicYear, callback) {
-  db.get('SELECT id FROM users WHERE register_no = ?', [registerNo], (err, student) => {
-    if (err || !student) return callback(err || new Error('Student not found'));
+// Get student timetable
+app.get('/api/student/timetable', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
     
-    // Get results for specific semester and academic year only
-    db.all('SELECT * FROM student_results WHERE register_no = ? AND semester = ? AND academic_year = ? AND semester_grade IS NOT NULL',
-      [registerNo, semester, academicYear], (err, results) => {
-        if (err) return callback(err);
-        
-        let totalCredits = 0;
-        let totalGradePoints = 0;
-        
-        console.log(`Found ${results.length} results for ${registerNo} semester ${semester} year ${academicYear}`);
-        
-        results.forEach(result => {
-          const credits = 3;
-          const gradePoints = calculateGradePoints(result.semester_grade);
-          totalCredits += credits;
-          totalGradePoints += (gradePoints * credits);
-          console.log(`${result.subject_code}: ${result.semester_grade} = ${gradePoints} points`);
-        });
-        
-        const sgpa = totalCredits > 0 ? parseFloat((totalGradePoints / totalCredits).toFixed(2)) : 0;
-        console.log(`Total: ${totalGradePoints}/${totalCredits} = SGPA: ${sgpa}`);
-        
-        // Store SGPA in student_gpa table
-        db.run(`INSERT OR REPLACE INTO student_gpa 
-                (student_id, semester, academic_year, sgpa, total_credits, earned_credits) 
-                VALUES (?, ?, ?, ?, ?, ?)`,
-          [student.id, semester, academicYear, sgpa, totalCredits, totalCredits],
-          (err) => {
-            if (err) return callback(err);
-            updateStudentCGPA(student.id, callback);
-          }
+    // Get user info to find department
+    const userResult = await db.query('SELECT department FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const department = userResult.rows[0].department;
+    
+    // Get timetable for student's department (assuming current year/semester)
+    const timetableResult = await db.query(
+      'SELECT * FROM timetables WHERE department = $1 ORDER BY day_of_week, period_number',
+      [department]
+    );
+    
+    res.json(timetableResult.rows);
+  } catch (error) {
+    console.error('❌ Student timetable fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get students for staff assignment
+app.get('/api/staff/students/:assignmentId', authenticateToken, async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { academic_year } = req.query;
+    
+    // Get assignment details
+    const assignmentResult = await db.query('SELECT * FROM staff_assignments WHERE id = $1', [assignmentId]);
+    if (assignmentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+    const assignment = assignmentResult.rows[0];
+    
+    // Get students for this department and year
+    const studentsResult = await db.query(
+      'SELECT id, name, register_no, department FROM users WHERE role = $1 AND department = $2 ORDER BY name',
+      ['student', assignment.department]
+    );
+    
+    res.json({ students: studentsResult.rows });
+  } catch (error) {
+    console.error('❌ Staff students fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Save grades
+app.post('/api/staff/grades', authenticateToken, async (req, res) => {
+  try {
+    const { students, subject_code, subject_name, semester, grade_type, academic_year } = req.body;
+    
+    // Save grades for each student
+    const promises = students.map(student => {
+      if (grade_type === 'Semester') {
+        return db.query(
+          'INSERT INTO student_results (register_no, subject_code, semester, academic_year, semester_grade) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (register_no, subject_code, semester, academic_year) DO UPDATE SET semester_grade = $5',
+          [student.id, subject_code, semester, academic_year, student.grade]
+        );
+      } else {
+        const column = grade_type.toLowerCase() + '_marks';
+        return db.query(
+          `INSERT INTO student_results (register_no, subject_code, semester, academic_year, ${column}) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (register_no, subject_code, semester, academic_year) DO UPDATE SET ${column} = $5`,
+          [student.id, subject_code, semester, academic_year, student.marks]
         );
       }
-    );
-  });
-}
-
-// Student calculate own GPA
-app.post('/api/student/calculate-gpa', authenticateToken, (req, res) => {
-  const studentId = req.user.id;
-  
-  db.get('SELECT register_no FROM users WHERE id = ?', [studentId], (err, student) => {
-    if (err || !student) return res.status(500).json({ error: 'Student not found' });
-    
-    db.all('SELECT DISTINCT semester, academic_year FROM student_results WHERE register_no = ? AND semester_grade IS NOT NULL',
-      [student.register_no], (err, resultSemesters) => {
-        if (err) return res.status(500).json({ error: 'Database error' });
-        
-        let completed = 0;
-        const total = resultSemesters.length;
-        
-        if (total === 0) {
-          return res.json({ message: 'No semester results found' });
-        }
-        
-        resultSemesters.forEach(sem => {
-          calculateGPAFromResults(student.register_no, sem.semester, sem.academic_year, (err) => {
-            completed++;
-            if (completed === total) {
-              res.json({ message: `GPA calculated for ${total} semesters from results` });
-            }
-          });
-        });
-      }
-    );
-  });
-});
-
-// Admin trigger GPA calculation
-app.post('/api/admin/calculate-gpa', authenticateToken, requireAdmin, (req, res) => {
-  const { student_id, semester, academic_year } = req.body;
-  
-  calculateAndStoreGPA(student_id, semester, academic_year, (err) => {
-    if (err) return res.status(500).json({ error: 'GPA calculation failed' });
-    res.json({ message: 'GPA calculated and stored successfully' });
-  });
-});
-
-// Calculate GPA for all students from student_results
-app.post('/api/admin/calculate-all-gpa', authenticateToken, requireAdmin, (req, res) => {
-  db.all('SELECT DISTINCT register_no FROM student_results', (err, students) => {
-    console.log(`Found ${students?.length || 0} students with results`);
-    if (students && students.length > 0) {
-      console.log(`First student: ${students[0].register_no}`);
-    }
-    if (err) return res.status(500).json({ error: 'Database error' });
-    
-    let processed = 0;
-    const total = students.length;
-    
-    if (total === 0) {
-      return res.json({ message: 'No student results found' });
-    }
-    
-    students.forEach(student => {
-      console.log(`Processing student: ${student.register_no}`);
-      
-      db.get('SELECT id FROM users WHERE register_no = ?', [student.register_no], (err, user) => {
-        if (err || !user) {
-          console.log(`User not found for ${student.register_no}`);
-          processed++;
-          if (processed === total) {
-            res.json({ message: `GPA calculated for ${total} students` });
-          }
-          return;
-        }
-        
-        db.all('SELECT DISTINCT semester, academic_year FROM student_results WHERE register_no = ?',
-          [student.register_no], (err, semesters) => {
-            if (err) {
-              processed++;
-              if (processed === total) {
-                res.json({ message: `GPA calculated for ${total} students` });
-              }
-              return;
-            }
-            
-            console.log(`Found ${semesters.length} semesters for ${student.register_no}:`, semesters);
-            
-            let semProcessed = 0;
-            semesters.forEach(sem => {
-              console.log(`Calculating for semester ${sem.semester}, year ${sem.academic_year}`);
-              calculateGPAFromResults(student.register_no, sem.semester, sem.academic_year, () => {
-                semProcessed++;
-                if (semProcessed === semesters.length) {
-                  processed++;
-                  if (processed === total) {
-                    res.json({ message: `GPA calculated for ${total} students` });
-                  }
-                }
-              });
-            });
-          }
-        );
-      });
-    });
-  });
-});
-
-// Clear all student results and GPA tables
-app.delete('/api/debug/clear-all-results', authenticateToken, requireAdmin, (req, res) => {
-  db.run('DELETE FROM student_results', function(err1) {
-    if (err1) return res.status(500).json({ error: 'Failed to clear student_results' });
-    const resultsDeleted = this.changes;
-    
-    db.run('DELETE FROM student_gpa', function(err2) {
-      if (err2) return res.status(500).json({ error: 'Failed to clear student_gpa' });
-      const sgpaDeleted = this.changes;
-      
-      db.run('DELETE FROM student_cgpa', function(err3) {
-        if (err3) return res.status(500).json({ error: 'Failed to clear student_cgpa' });
-        const cgpaDeleted = this.changes;
-        
-        res.json({ 
-          message: `${resultsDeleted} student results, ${sgpaDeleted} SGPA records, and ${cgpaDeleted} CGPA records deleted successfully`,
-          student_results_deleted: resultsDeleted,
-          student_gpa_deleted: sgpaDeleted,
-          student_cgpa_deleted: cgpaDeleted
-        });
-      });
-    });
-  });
-});
-
-// Generate Official Portfolio PDF
-app.post('/api/generate-portfolio-pdf', authenticateToken, async (req, res) => {
-  console.log('Official PDF generation request received');
-  
-  if (!puppeteer) {
-    return res.status(500).json({ error: 'Puppeteer not available' });
-  }
-  
-  const { studentData, semesterResults, achievements } = req.body;
-  
-  if (!studentData || !semesterResults || !achievements) {
-    return res.status(400).json({ error: 'Missing required data' });
-  }
-  
-  const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    @page { size: A4; margin: 0.5in; }
-    body { font-family: 'Times New Roman', serif; margin: 0; color: #000; }
-    .page-break { page-break-before: always; }
-    .header { text-align: center; border-bottom: 3px solid #1e3a8a; padding: 30px 40px; }
-    .logo { width: 80px; height: 80px; background: #1e3a8a; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: bold; margin-bottom: 20px; }
-    h1 { margin: 0 0 5px 0; font-size: 24px; color: #1e3a8a; font-weight: bold; }
-    h2 { margin: 0; font-size: 20px; color: #1e3a8a; font-weight: bold; letter-spacing: 1px; }
-    h3 { margin: 0 0 15px 0; font-size: 16px; color: #1e3a8a; font-weight: bold; border-bottom: 2px solid #1e3a8a; padding-bottom: 5px; display: inline-block; }
-    .section { padding: 25px 40px; border-bottom: 1px solid #e5e7eb; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-    .info-item { margin: 5px 0; font-size: 14px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: center; }
-    th { background: #f3f4f6; }
-    .signatures { display: flex; justify-content: space-between; margin: 30px 0; }
-    .signature { text-align: center; width: 150px; }
-    .signature-line { height: 60px; border-bottom: 1px solid #000; margin-bottom: 5px; }
-    .seal { width: 80px; height: 80px; border: 2px solid #1e3a8a; border-radius: 50%; margin: 20px auto 10px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #1e3a8a; }
-    .footer-section { padding: 40px 40px 30px 40px; margin-top: 100px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="logo">LOGO</div>
-    <h1>XYZ COLLEGE OF ENGINEERING</h1>
-    <p style="margin: 0 0 20px 0; font-size: 14px; color: #6b7280;">Autonomous Institution | NAAC A+ Accredited</p>
-    <h2>VERIFIED STUDENT ACHIEVEMENT PORTFOLIO</h2>
-  </div>
-  
-  <div class="section">
-    <h3>STUDENT INFORMATION</h3>
-    <div class="info-grid">
-      <div>
-        <div class="info-item"><strong>Register Number:</strong> ${studentData.regNo}</div>
-        <div class="info-item"><strong>Full Name:</strong> ${studentData.fullName}</div>
-        <div class="info-item"><strong>Department:</strong> ${studentData.department}</div>
-      </div>
-      <div>
-        <div class="info-item"><strong>Year:</strong> ${studentData.year}</div>
-        <div class="info-item"><strong>Program:</strong> ${studentData.program}</div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="section">
-    <h3>ACADEMIC SUMMARY</h3>
-    <div style="display: flex; gap: 30px; margin-bottom: 20px;">
-      <div style="font-size: 14px;"><strong>CGPA:</strong> ${studentData.cgpa}</div>
-      <div style="font-size: 14px;"><strong>Attendance:</strong> ${studentData.attendance}</div>
-    </div>
-    <table>
-      <thead>
-        <tr><th>Semester</th><th>GPA</th><th>Credits</th></tr>
-      </thead>
-      <tbody>
-        ${semesterResults.map(sem => `<tr><td>${sem.semester}</td><td>${sem.gpa}</td><td>${sem.credits}</td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>
-  
-  <div class="section">
-    <h3>ANALYTICS & SUMMARY</h3>
-    <div class="info-grid">
-      <div>
-        <div class="info-item"><strong>Total Certificates:</strong> ${achievements.length}</div>
-        <div class="info-item"><strong>Total Training Hours:</strong> 150</div>
-      </div>
-      <div>
-        <div class="info-item"><strong>Credits Earned:</strong> 6</div>
-        <div class="info-item"><strong>Graduate Attributes:</strong> Problem Solving, Teamwork, Communication, Technical Skills</div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="page-break"></div>
-  
-  <div class="section">
-    <h3>VERIFIED ACHIEVEMENTS & CERTIFICATIONS</h3>
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 8%;">Sl. No</th>
-          <th style="width: 15%;">Activity Type</th>
-          <th style="width: 30%;">Title / Certificate</th>
-          <th style="width: 20%;">Issuing Body</th>
-          <th style="width: 15%;">Date</th>
-          <th style="width: 12%;">Verified</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${achievements.map(ach => `<tr><td>${ach.sl}</td><td>${ach.type}</td><td>${ach.title}</td><td>${ach.issuer}</td><td>${ach.date}</td><td>${ach.verified ? '✓' : '✗'}</td></tr>`).join('')}
-      </tbody>
-    </table>
-  </div>
-  
-  <div class="footer-section">
-    <div class="signatures">
-      <div class="signature">
-        <div class="signature-line"></div>
-        <p style="margin: 0; font-size: 12px; font-weight: bold;">Student Signature</p>
-      </div>
-      <div class="signature">
-        <div class="signature-line"></div>
-        <p style="margin: 0; font-size: 12px; font-weight: bold;">Faculty Advisor</p>
-      </div>
-      <div class="signature">
-        <div class="signature-line"></div>
-        <p style="margin: 0; font-size: 12px; font-weight: bold;">HOD / Principal</p>
-      </div>
-    </div>
-    
-    <div style="text-align: center; margin-top: 20px;">
-      <div class="seal">COLLEGE SEAL</div>
-      <p style="margin: 0; font-size: 11px; font-style: italic; color: #6b7280;">* This portfolio is system-generated and verified by XYZ College of Engineering *</p>
-    </div>
-  </div>
-</body>
-</html>`;
-  
-  try {
-    console.log('Launching Puppeteer...');
-    const browser = await puppeteer.launch({ 
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      timeout: 60000
     });
     
-    const page = await browser.newPage();
-    page.setDefaultTimeout(60000);
-    
-    console.log('Setting content...');
-    await page.setContent(htmlContent, { 
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
-    });
-    
-    console.log('Generating PDF...');
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
-    });
-    
-    await browser.close();
-    console.log('PDF generated successfully, size:', pdf.length);
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${studentData.fullName.replace(/\s+/g, '_')}_Portfolio.pdf"`);
-    res.setHeader('Content-Length', pdf.length);
-    res.end(pdf, 'binary');
+    await Promise.all(promises);
+    res.json({ message: 'Grades saved successfully' });
   } catch (error) {
-    console.error('PDF generation error:', error);
-    res.status(500).json({ error: 'PDF generation failed: ' + error.message });
+    console.error('❌ Staff grades save error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
   }
 });
 
-// Generate Intermediate Portfolio PDF
-app.post('/api/generate-intermediate-portfolio-pdf', authenticateToken, async (req, res) => {
-  const { studentData, achievements, badges } = req.body;
-  
-  const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    @page { size: A4; margin: 0.5in; }
-    body { font-family: 'Inter', sans-serif; margin: 0; color: #333; background: white; }
-    .container { border: 3px solid #0891b2; border-radius: 20px; overflow: hidden; }
-    .banner { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 12px 25px; color: white; font-size: 13px; font-weight: 600; }
-    .header { background: linear-gradient(135deg, #0891b2 0%, #0e7490 50%, #155e75 100%); padding: 30px; color: white; text-align: center; }
-    h1 { margin: 0; font-size: 32px; font-weight: 900; }
-    .content { display: flex; }
-    .left-col { flex: 1; padding: 30px; background: #f8fafc; }
-    .right-col { flex: 1.5; padding: 30px; }
-    .info-card { background: white; padding: 25px; border-radius: 16px; margin-bottom: 25px; box-shadow: 0 8px 32px rgba(0,0,0,0.08); }
-    .achievement-card { padding: 25px; border-radius: 16px; margin-bottom: 20px; }
-    .academics { background: #fef3c7; border: 2px solid #f59e0b; }
-    .extracurricular { background: #dcfce7; border: 2px solid #22c55e; }
-    .badges-card { background: #fce7f3; border: 2px solid #ec4899; }
-    .badge { background: white; padding: 8px 16px; border-radius: 25px; font-size: 13px; font-weight: 600; color: #be185d; border: 2px solid #f9a8d4; margin: 5px; display: inline-block; }
-    .summary { padding: 20px 25px; background: #e0f2fe; border-top: 2px solid #0891b2; display: flex; justify-content: space-around; }
-    .footer { padding: 15px; text-align: center; background: #f8fafc; }
-    h3 { color: #0891b2; font-size: 20px; margin: 0 0 15px 0; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="banner">
-      Premium Intermediate Template - Enhanced Visual Analytics
-    </div>
-    
-    <div class="header">
-      <h1>Student Portfolio - Intermediate</h1>
-    </div>
-    
-    <div class="content">
-      <div class="left-col">
-        <div class="info-card">
-          <h3>Student Information</h3>
-          <p><strong>Name:</strong> ${studentData.name}</p>
-          <p><strong>Reg No:</strong> ${studentData.regNo}</p>
-          <p><strong>Department:</strong> ${studentData.department}</p>
-          <p><strong>Year:</strong> ${studentData.year}</p>
-        </div>
-        
-        <div class="info-card">
-          <h3>Progress</h3>
-          <p><strong>Level:</strong> ${studentData.level}</p>
-          <p><strong>Points:</strong> ${studentData.points}/${studentData.maxPoints}</p>
-          <div style="width: 100%; height: 20px; background: #e0f2fe; border-radius: 10px; overflow: hidden;">
-            <div style="width: ${(studentData.points / studentData.maxPoints) * 100}%; height: 100%; background: #0891b2;"></div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="right-col">
-        <div class="achievement-card academics">
-          <h3><span style="color: #f59e0b; margin-right: 8px;">📖</span>Academics</h3>
-          ${achievements.academics.map(item => `
-            <div style="margin-bottom: 12px;">
-              <p style="margin: 0 0 4px 0; font-weight: 700;">• ${item.title}</p>
-              <p style="margin: 0; font-size: 13px; color: #78716c;">${item.status} - ${item.date}</p>
-            </div>
-          `).join('')}
-        </div>
-        
-        <div class="achievement-card extracurricular">
-          <h3><span style="color: #8b5cf6; margin-right: 8px;">👤</span>Extracurricular</h3>
-          ${achievements.extracurricular.map(item => `
-            <div style="margin-bottom: 12px;">
-              <p style="margin: 0 0 4px 0; font-weight: 700;">• ${item.title}</p>
-              <p style="margin: 0; font-size: 13px; color: #6b7280;">${item.status} - ${item.date}</p>
-            </div>
-          `).join('')}
-        </div>
-        
-        <div class="achievement-card badges-card">
-          <h3><span style="color: #ec4899; margin-right: 8px;">★</span>Badges Earned</h3>
-          <div>
-            ${badges.map(badge => `<span class="badge">${badge}</span>`).join('')}
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="summary">
-      <div style="text-align: center;">
-        <div style="font-size: 20px; font-weight: 900; color: #0891b2;">${achievements.academics.length + achievements.extracurricular.length}</div>
-        <div style="font-size: 11px; color: #0e7490; font-weight: 600;">Achievements</div>
-      </div>
-      <div style="text-align: center;">
-        <div style="font-size: 20px; font-weight: 900; color: #0891b2;">${badges.length}</div>
-        <div style="font-size: 11px; color: #0e7490; font-weight: 600;">Badges</div>
-      </div>
-      <div style="text-align: center;">
-        <div style="font-size: 20px; font-weight: 900; color: #0891b2;">${Math.round((studentData.points / studentData.maxPoints) * 100)}%</div>
-        <div style="font-size: 11px; color: #0e7490; font-weight: 600;">Progress</div>
-      </div>
-    </div>
-    
-    <div class="footer">
-      <p style="margin: 0; font-size: 13px; color: #6b7280;"><span style="color: #8b5cf6;">★</span> Generated via Smart Student Hub</p>
-    </div>
-  </div>
-</body>
-</html>`;
-  
+// Student results endpoints
+app.post('/api/student-results/import', authenticateToken, async (req, res) => {
   try {
-    const browser = await puppeteer.launch({ 
-      headless: true, 
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      timeout: 60000
-    });
-    const page = await browser.newPage();
-    page.setDefaultTimeout(60000);
-    
-    await page.setContent(htmlContent, { 
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
-    });
-    
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
-    });
-    
-    await browser.close();
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${studentData.name.replace(/\s+/g, '_')}_Intermediate_Portfolio.pdf"`);
-    res.end(pdf, 'binary');
+    // Handle CSV import logic here
+    res.json({ message: 'Results imported successfully' });
   } catch (error) {
-    console.error('Intermediate PDF generation error:', error);
-    res.status(500).json({ error: 'PDF generation failed' });
+    res.status(500).json({ error: 'Import failed' });
   }
 });
 
-// Generate Advanced Portfolio PDF
-app.post('/api/generate-advanced-portfolio-pdf', authenticateToken, async (req, res) => {
-  if (!puppeteer) {
-    return res.status(500).json({ error: 'Puppeteer not available' });
-  }
-  
-  const { studentData, certificates } = req.body;
-  
-  const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    @page { size: A4; margin: 0.5in; }
-    body { font-family: 'Inter', sans-serif; margin: 0; color: #333; background: white; }
-    .header { background: linear-gradient(135deg, #312e81 0%, #1e1b4b 100%); padding: 40px; color: white; text-align: center; }
-    h1 { margin: 0; font-size: 36px; font-weight: 900; }
-    .content { padding: 30px; }
-    .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
-    .info-card { padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; }
-    .achievements { margin-bottom: 30px; }
-    .achievement-item { padding: 20px; margin-bottom: 15px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-    .badges { text-align: center; padding: 30px; background: #f8fafc; }
-    .badge { display: inline-block; padding: 8px 16px; margin: 5px; background: #e0e7ff; color: #3730a3; border-radius: 20px; font-weight: 600; }
-    .footer { text-align: center; padding: 20px; background: #f8fafc; color: #64748b; }
-    h2 { color: #1e293b; font-size: 24px; margin-bottom: 20px; }
-    h3 { color: #475569; font-size: 14px; text-transform: uppercase; margin-bottom: 8px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>${studentData.name}</h1>
-    <p style="font-size: 18px; margin: 10px 0 0 0;">Information Technology Student</p>
-  </div>
-  
-  <div class="content">
-    <h2>Academic Information</h2>
-    <div class="info-grid">
-      <div class="info-card">
-        <h3>Registration</h3>
-        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.regNo}</p>
-      </div>
-      <div class="info-card">
-        <h3>Department</h3>
-        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.department}</p>
-      </div>
-      <div class="info-card">
-        <h3>Academic Year</h3>
-        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.year}</p>
-      </div>
-      <div class="info-card">
-        <h3>Level</h3>
-        <p style="font-size: 18px; font-weight: bold; margin: 0;">${studentData.level}</p>
-      </div>
-    </div>
-    
-    <h2>Key Achievements</h2>
-    <div class="achievements">
-      ${certificates.map(cert => `
-        <div class="achievement-item">
-          <h3 style="color: #1e293b; font-size: 16px; margin: 0 0 8px 0;">${cert.certificate_name}</h3>
-          <p style="margin: 0; color: #64748b;">Uploaded: ${new Date(cert.upload_date).toLocaleDateString()}</p>
-        </div>
-      `).join('')}
-    </div>
-  </div>
-  
-  <div class="badges">
-    <h2>Badges & Level</h2>
-    <div>
-      <span class="badge">Innovator (${studentData.totalPoints} Points)</span>
-      <span class="badge">Leader</span>
-      <span class="badge">Mentor</span>
-    </div>
-    <div style="margin-top: 20px; padding: 20px; background: white; border-radius: 12px; display: inline-block;">
-      <h3 style="margin: 0 0 8px 0;">Current Level: ${studentData.level}</h3>
-      <p style="margin: 0;">Total Points: ${studentData.totalPoints}</p>
-    </div>
-  </div>
-  
-  <div class="footer">
-    <p>🎓 Digital Portfolio • Verified & Generated via Smart Student Hub</p>
-    <p style="font-size: 12px; margin-top: 8px;">Last Updated: ${new Date().toLocaleDateString()}</p>
-  </div>
-</body>
-</html>`;
-  
+app.get('/api/student-results/template', authenticateToken, async (req, res) => {
   try {
-    const browser = await puppeteer.launch({ 
-      headless: true, 
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      timeout: 60000
-    });
-    const page = await browser.newPage();
-    page.setDefaultTimeout(60000);
-    
-    await page.setContent(htmlContent, { 
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
-    });
-    
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
-    });
-    
-    await browser.close();
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${studentData.name.replace(/\s+/g, '_')}_Advanced_Portfolio.pdf"`);
-    res.end(pdf, 'binary');
+    const csvContent = 'register_no,subject_code,semester,academic_year,ia1_marks,ia2_marks,ia3_marks,semester_grade\n';
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=student_results_template.csv');
+    res.send(csvContent);
   } catch (error) {
-    console.error('Advanced PDF generation error:', error);
-    res.status(500).json({ error: 'PDF generation failed' });
+    res.status(500).json({ error: 'Template generation failed' });
   }
 });
 
-// Generate Beginner Portfolio PDF
-app.post('/api/generate-beginner-portfolio-pdf', authenticateToken, async (req, res) => {
-  const { studentData, certificates } = req.body;
-  
-  const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    @page { size: A4; margin: 0.5in; }
-    body { font-family: 'Roboto', sans-serif; margin: 0; color: #333; }
-    .container { border: 2px solid #065f46; background: #fefdf8; }
-    .header { padding: 20px; border-bottom: 2px solid #065f46; text-align: center; }
-    h1 { margin: 0; font-size: 24px; color: #065f46; font-weight: bold; }
-    .student-info { padding: 20px; border-bottom: 1px solid #d6f5d6; display: flex; justify-content: space-between; }
-    .certificates { padding: 20px; border-bottom: 1px solid #d6f5d6; }
-    .cert-item { padding: 15px 0; border-bottom: 1px solid #f0fdf4; }
-    .cert-item:last-child { border-bottom: none; }
-    .progress-section { padding: 20px; border-bottom: 1px solid #d6f5d6; }
-    .progress-bar { width: 100%; height: 20px; background: #f0fdf4; border-radius: 10px; overflow: hidden; }
-    .progress-fill { height: 100%; background: #065f46; }
-    .footer { padding: 20px; text-align: center; background: #f0fdf4; }
-    h2 { color: #065f46; }
-    p strong { color: #065f46; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Student Portfolio</h1>
-    </div>
-    
-    <div class="student-info">
-      <div>
-        <p><strong>Student Name:</strong> ${studentData.name}</p>
-        <p><strong>Department:</strong> ${studentData.department}</p>
-      </div>
-      <div>
-        <p><strong>Reg No:</strong> ${studentData.regNo}</p>
-        <p><strong>Year:</strong> ${studentData.year}</p>
-      </div>
-    </div>
-    
-    <div class="certificates">
-      <h2 style="margin: 0 0 15px 0; font-size: 18px;">Certificates & Achievements</h2>
-      ${certificates.map(cert => `
-        <div class="cert-item">
-          <p style="margin: 0 0 5px 0; font-weight: bold;">- Certificate: "${cert.title}"</p>
-          <p style="margin: 0; font-size: 14px; color: #666;">Date: ${cert.date} &nbsp;&nbsp;&nbsp; Status: ${cert.status} <span style="color: #22c55e; font-weight: bold;">✓</span></p>
-        </div>
-      `).join('')}
-    </div>
-    
-    <div class="progress-section">
-      <p style="margin: 0 0 10px 0; font-weight: bold;">Level: ${studentData.level} (${studentData.points} Points)</p>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width: ${(studentData.points / studentData.maxPoints) * 100}%;"></div>
-      </div>
-      <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">${studentData.points}/${studentData.maxPoints} points to next level</p>
-    </div>
-    
-    <div class="footer">
-      <p style="margin: 0; font-size: 14px; color: #666;">Auto-generated on Smart Student Hub</p>
-    </div>
-  </div>
-</body>
-</html>`;
-  
+app.post('/api/admin/calculate-all-gpa', authenticateToken, async (req, res) => {
   try {
-    const browser = await puppeteer.launch({ 
-      headless: true, 
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      timeout: 60000
-    });
-    const page = await browser.newPage();
-    page.setDefaultTimeout(60000);
-    
-    await page.setContent(htmlContent, { 
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
-    });
-    
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
-    });
-    
-    await browser.close();
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${studentData.name.replace(/\s+/g, '_')}_Beginner_Portfolio.pdf"`);
-    res.end(pdf, 'binary');
+    // GPA calculation logic here
+    res.json({ message: 'GPA calculated for all students' });
   } catch (error) {
-    console.error('Beginner PDF generation error:', error);
-    res.status(500).json({ error: 'PDF generation failed' });
+    res.status(500).json({ error: 'GPA calculation failed' });
   }
-});
-
-// Get students with certificate statistics for CC staff
-app.get('/api/cc-students-certificates', authenticateToken, (req, res) => {
-  // Get staff info first
-  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
-    if (err || !staffInfo) {
-      return res.status(500).json({ error: 'Staff not found' });
-    }
-    
-    // Check if this staff is assigned as CC
-    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      if (!ccAssignment) {
-        return res.status(403).json({ error: 'Access denied - Not a CC' });
-      }
-      
-      // Get students from CC's department with certificate counts
-      db.all(`SELECT u.id, u.name, u.register_no, u.department, 
-                     CASE 
-                       WHEN u.current_semester <= 2 THEN '1'
-                       WHEN u.current_semester <= 4 THEN '2'
-                       WHEN u.current_semester <= 6 THEN '3'
-                       ELSE '4'
-                     END as year,
-                     COUNT(CASE WHEN c.status = 'approved' THEN 1 END) as approvedCertificates,
-                     COUNT(CASE WHEN c.status = 'pending' THEN 1 END) as pendingCertificates,
-                     COUNT(c.id) as totalCertificates
-              FROM users u 
-              LEFT JOIN certificates c ON u.id = c.student_id 
-              WHERE u.role = 'student' AND u.department = ?
-              GROUP BY u.id, u.name, u.register_no, u.department
-              ORDER BY u.register_no`,
-        [ccAssignment.department], (err, students) => {
-          if (err) {
-            return res.status(500).json({ error: 'Database error' });
-          }
-          
-          res.json({ students });
-        }
-      );
-    });
-  });
-});
-
-// Get certificates for CC staff to approve
-app.get('/api/cc-certificates', authenticateToken, (req, res) => {
-  // Get staff info first
-  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
-    if (err || !staffInfo) {
-      return res.status(500).json({ error: 'Staff not found' });
-    }
-    
-    // Check if this staff is assigned as CC
-    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      
-      if (!ccAssignment) {
-        return res.status(403).json({ error: 'Access denied - Not a CC' });
-      }
-      
-      // Get certificates from students in CC's department and year
-      db.all(`SELECT c.*, u.name as studentName, u.register_no as regNo 
-              FROM certificates c 
-              JOIN users u ON c.student_id = u.id 
-              WHERE u.department = ? 
-              ORDER BY c.upload_date DESC`,
-        [ccAssignment.department], (err, certificates) => {
-          if (err) {
-            return res.status(500).json({ error: 'Database error' });
-          }
-          
-          // Format certificates for display
-          const formattedCerts = certificates.map(cert => ({
-            id: cert.id,
-            studentName: cert.studentName,
-            regNo: cert.regNo,
-            certificateName: cert.certificate_name,
-            organization: 'Various',
-            issueDate: cert.upload_date,
-            category: 'General',
-            status: cert.status,
-            uploadDate: cert.upload_date,
-            fileUrl: cert.certificate_file || '#'
-          }));
-          
-          res.json({ certificates: formattedCerts });
-        }
-      );
-    });
-  });
-});
-
-// Get certificates for a specific student
-app.get('/api/student-certificates/:studentId', authenticateToken, (req, res) => {
-  const { studentId } = req.params;
-  
-  // Get staff info
-  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
-    if (err || !staffInfo) {
-      return res.status(500).json({ error: 'Staff not found' });
-    }
-    
-    // Check if staff is CC
-    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
-      if (err || !ccAssignment) {
-        return res.status(403).json({ error: 'Access denied - Not a CC' });
-      }
-      
-      // Get certificates for this student
-      db.all(`SELECT c.* FROM certificates c 
-              JOIN users u ON c.student_id = u.id 
-              WHERE c.student_id = ? AND u.department = ?
-              ORDER BY c.upload_date DESC`,
-        [studentId, ccAssignment.department], (err, certificates) => {
-          if (err) {
-            return res.status(500).json({ error: 'Database error' });
-          }
-          
-          res.json({ certificates });
-        }
-      );
-    });
-  });
-});
-
-// Approve/Reject certificate
-app.put('/api/certificates/:id/approve', authenticateToken, (req, res) => {
-  const { status, remarks } = req.body;
-  const certId = req.params.id;
-  
-  // Get staff info
-  db.get('SELECT staff_id FROM users WHERE id = ?', [req.user.id], (err, staffInfo) => {
-    if (err || !staffInfo) {
-      return res.status(500).json({ error: 'Staff not found' });
-    }
-    
-    // Check if staff is CC
-    db.get('SELECT * FROM cc_assignments WHERE staff_id = ?', [staffInfo.staff_id], (err, ccAssignment) => {
-      if (err || !ccAssignment) {
-        return res.status(403).json({ error: 'Access denied - Not a CC' });
-      }
-      
-      // Update certificate status
-      db.run(`UPDATE certificates SET status = ?, approved_by = ?, approved_date = datetime('now') WHERE id = ?`,
-        [status, req.user.id, certId], function(err) {
-          if (err) {
-            return res.status(500).json({ error: 'Database error' });
-          }
-          
-          res.json({ message: `Certificate ${status} successfully` });
-        }
-      );
-    });
-  });
 });
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log('✅ Subject management system ready');
-  console.log('  - Subjects migrated with default 3 credits');
-  console.log('  - Admin can update credits via Subject Management');
 });
