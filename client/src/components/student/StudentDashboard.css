@@ -947,6 +947,98 @@
   font-size: 1rem;
 }
 
+/* Leaderboard Styles */
+.leaderboard-section {
+  padding: 0;
+}
+
+.current-rank-card {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.rank-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.rank-icon .gold { color: #fbbf24; }
+.rank-icon .silver { color: #9ca3af; }
+.rank-icon .bronze { color: #d97706; }
+.rank-number {
+  font-weight: bold;
+  font-size: 18px;
+  color: white;
+}
+
+.leaderboard-list {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.leaderboard-header {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px 60px;
+  padding: 16px;
+  background: #f8fafc;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.leaderboard-item {
+  display: grid;
+  grid-template-columns: 60px 1fr 80px 60px;
+  padding: 16px;
+  border-bottom: 1px solid #f3f4f6;
+  align-items: center;
+}
+
+.leaderboard-item.current-user {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+}
+
+.student-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.student-name {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.student-reg {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.cgpa-value {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.trend-column .positive {
+  color: #10b981;
+}
+
+.trend-column .neutral {
+  color: #6b7280;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #6b7280;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .student-layout {

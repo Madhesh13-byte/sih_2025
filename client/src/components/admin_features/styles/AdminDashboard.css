@@ -293,6 +293,11 @@
   color: white;
 }
 
+.reports-icon {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+}
+
 .system-icon {
   background: linear-gradient(135deg, #ed8936, #dd6b20);
   color: white;
