@@ -3159,9 +3159,19 @@ app.put('/api/certificates/:id/approve', authenticateToken, (req, res) => {
   });
 });
 
+// Reports routes
+const reportsRoutes = require('./routes/reports');
+app.use('/api/reports', authenticateToken, reportsRoutes);
+
+// Database Reports routes
+const reportsDBRoutes = require('./routes/reports-db');
+app.use('/api/reports-db', authenticateToken, reportsDBRoutes);
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log('✅ Subject management system ready');
   console.log('  - Subjects migrated with default 3 credits');
   console.log('  - Admin can update credits via Subject Management');
+  console.log('✅ Reports system ready');
+  console.log('  - NAAC, NIRF & AICTE compliant reports available');
 });
