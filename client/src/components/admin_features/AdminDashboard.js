@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar, Filter, Hash, Building2 } from 'lucide-react';
 import './styles/AdminDashboard.css';
 import './styles/SubjectFilters.css';
+import './styles/FloatingForms.css';
 import ClassManagement from './ClassManagementNew';
 import AdminSettings from './AdminSettings';
 import TimetableManagement from './TimetableManagement';
@@ -13,7 +14,6 @@ import ViewAccounts from './ViewAccounts';
 import SubjectManagement from './SubjectManagement';
 import StaffAssignments from './StaffAssignments';
 import StudentResultsManagement from './StudentResultsManagement';
-import ReportsManagement from './ReportsManagement';
 
 function AdminDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('main');
@@ -30,7 +30,7 @@ function AdminDashboard({ user, logout }) {
   
   const fetchAccounts = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/admin/accounts', {
+      const response = await fetch('/api/admin/accounts', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const data = await response.json();
@@ -51,7 +51,7 @@ function AdminDashboard({ user, logout }) {
 
   const fetchClasses = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/classes', {
+      const response = await fetch('/api/classes', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       if (response.ok) {
@@ -137,9 +137,9 @@ function AdminDashboard({ user, logout }) {
           <ClassManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
         )}
         
-        {currentView === 'reports' && (
-          <ReportsManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
-        )}
+        {/* {currentView === 'reports' && (
+          <ReportsOverview setCurrentView={setCurrentView} />
+        )} */}
         
         {currentView === 'settings' && (
           <AdminSettings setCurrentView={setCurrentView} />
@@ -220,21 +220,6 @@ function MainAdminView({ setCurrentView }) {
             <button className="action-card results-card" onClick={() => setCurrentView('student-results')}>
               <BarChart3 size={20} />
               <span>Results</span>
-            </button>
-          </div>
-        </div>
-        
-        <div className="section-card reports-section">
-          <div className="section-header">
-            <div className="section-icon reports-icon">
-              <BarChart3 size={24} />
-            </div>
-            <h3>Reports & Analytics</h3>
-          </div>
-          <div className="card-actions">
-            <button className="action-card reports-card" onClick={() => setCurrentView('reports')}>
-              <BarChart3 size={20} />
-              <span>Institutional Reports</span>
             </button>
           </div>
         </div>

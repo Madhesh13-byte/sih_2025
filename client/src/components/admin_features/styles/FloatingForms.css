@@ -1,0 +1,471 @@
+/* Floating Forms with CSS Variables - Gabriel Style */
+:root {
+  /* Floating Variables */
+  --float-spacing: 1.5rem;
+  --float-border-radius: 12px;
+  --float-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --float-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --float-shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.15);
+  
+  /* Colors */
+  --primary: #6366f1;
+  --primary-light: rgba(99, 102, 241, 0.1);
+  --gray-50: #f8fafc;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-700: #334155;
+  --gray-900: #0f172a;
+}
+
+/* Floating Container */
+.floating-container {
+  --container-padding: 2rem;
+  --container-gap: var(--float-spacing);
+  
+  background: white;
+  border-radius: calc(var(--float-border-radius) + 4px);
+  padding: var(--container-padding);
+  box-shadow: var(--float-shadow);
+  transition: var(--float-transition);
+}
+
+.floating-container:hover {
+  box-shadow: var(--float-shadow-hover);
+  transform: translateY(-2px);
+}
+
+/* Floating Form Groups */
+.floating-group {
+  --group-margin: 0 0 var(--float-spacing) 0;
+  --label-color: var(--gray-700);
+  --input-padding: 1rem 1.25rem;
+  --input-border: 2px solid var(--gray-200);
+  --input-focus-border: 2px solid var(--primary);
+  
+  position: relative;
+  margin: var(--group-margin);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Floating Labels */
+.floating-label {
+  --label-font-size: 0.9rem;
+  --label-font-weight: 600;
+  --label-margin: 0 0 0.5rem 0;
+  --label-transition: var(--float-transition);
+  
+  font-size: var(--label-font-size);
+  font-weight: var(--label-font-weight);
+  color: var(--label-color);
+  margin: var(--label-margin);
+  transition: var(--label-transition);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.floating-label:hover {
+  color: var(--primary);
+  transform: translateX(2px);
+}
+
+/* Floating Inputs */
+.floating-input,
+.floating-select,
+.floating-textarea {
+  --input-bg: white;
+  --input-color: var(--gray-900);
+  --input-font-size: 1rem;
+  --input-border-radius: var(--float-border-radius);
+  --input-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --input-shadow-focus: 0 0 0 4px var(--primary-light);
+  
+  width: 100%;
+  padding: var(--input-padding);
+  border: var(--input-border);
+  border-radius: var(--input-border-radius);
+  font-size: var(--input-font-size);
+  font-family: inherit;
+  background: var(--input-bg);
+  color: var(--input-color);
+  transition: var(--float-transition);
+  box-shadow: var(--input-shadow);
+  box-sizing: border-box;
+}
+
+.floating-input:hover,
+.floating-select:hover,
+.floating-textarea:hover {
+  border-color: var(--gray-300);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.floating-input:focus,
+.floating-select:focus,
+.floating-textarea:focus {
+  outline: none;
+  border: var(--input-focus-border);
+  box-shadow: var(--input-shadow-focus), var(--float-shadow);
+  transform: translateY(-2px);
+}
+
+/* Floating Grid System */
+.floating-grid {
+  --grid-columns: repeat(auto-fit, minmax(250px, 1fr));
+  --grid-gap: var(--float-spacing);
+  
+  display: grid;
+  grid-template-columns: var(--grid-columns);
+  gap: var(--grid-gap);
+  align-items: end;
+}
+
+.floating-grid-2 {
+  --grid-columns: repeat(2, 1fr);
+}
+
+.floating-grid-3 {
+  --grid-columns: repeat(3, 1fr);
+}
+
+.floating-grid-4 {
+  --grid-columns: repeat(4, 1fr);
+}
+
+/* Floating Sections */
+.floating-section {
+  --section-bg: linear-gradient(135deg, var(--gray-50), rgba(255, 255, 255, 0.8));
+  --section-border: 2px solid var(--gray-200);
+  --section-padding: 2rem;
+  --section-margin: 0 0 var(--float-spacing) 0;
+  
+  background: var(--section-bg);
+  border: var(--section-border);
+  border-radius: var(--float-border-radius);
+  padding: var(--section-padding);
+  margin: var(--section-margin);
+  transition: var(--float-transition);
+}
+
+.floating-section:hover {
+  border-color: var(--primary);
+  transform: translateY(-3px);
+  box-shadow: var(--float-shadow-hover);
+}
+
+/* Floating Section Headers */
+.floating-section-header {
+  --header-margin: 0 0 1.5rem 0;
+  --header-padding: 0 0 1rem 0;
+  --header-border: 2px solid var(--primary);
+  
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: var(--header-margin);
+  padding: var(--header-padding);
+  border-bottom: var(--header-border);
+  position: relative;
+}
+
+.floating-section-header::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 60px;
+  height: 2px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.floating-section-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+/* Floating Icons */
+.floating-icon {
+  --icon-size: 2.5rem;
+  --icon-bg: linear-gradient(135deg, var(--primary), #4f46e5);
+  --icon-color: white;
+  --icon-border-radius: 10px;
+  
+  width: var(--icon-size);
+  height: var(--icon-size);
+  background: var(--icon-bg);
+  color: var(--icon-color);
+  border-radius: var(--icon-border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--float-shadow);
+  transition: var(--float-transition);
+}
+
+.floating-section:hover .floating-icon {
+  transform: rotate(5deg) scale(1.1);
+  box-shadow: var(--float-shadow-hover);
+}
+
+/* Floating Buttons */
+.floating-btn {
+  --btn-padding: 1rem 2rem;
+  --btn-bg: linear-gradient(135deg, var(--primary), #4f46e5);
+  --btn-color: white;
+  --btn-font-size: 1rem;
+  --btn-font-weight: 600;
+  --btn-border-radius: var(--float-border-radius);
+  --btn-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  --btn-shadow-hover: 0 8px 25px rgba(99, 102, 241, 0.4);
+  
+  padding: var(--btn-padding);
+  background: var(--btn-bg);
+  color: var(--btn-color);
+  border: none;
+  border-radius: var(--btn-border-radius);
+  font-size: var(--btn-font-size);
+  font-weight: var(--btn-font-weight);
+  cursor: pointer;
+  transition: var(--float-transition);
+  box-shadow: var(--btn-shadow);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.floating-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.6s ease;
+}
+
+.floating-btn:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: var(--btn-shadow-hover);
+}
+
+.floating-btn:hover::before {
+  left: 100%;
+}
+
+.floating-btn:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+/* Floating Form Actions */
+.floating-actions {
+  --actions-gap: 1rem;
+  --actions-justify: flex-end;
+  --actions-margin: 2rem 0 0 0;
+  --actions-padding: 1.5rem 0 0 0;
+  --actions-border: 1px solid var(--gray-200);
+  
+  display: flex;
+  gap: var(--actions-gap);
+  justify-content: var(--actions-justify);
+  margin: var(--actions-margin);
+  padding: var(--actions-padding);
+  border-top: var(--actions-border);
+}
+
+/* Floating Secondary Button */
+.floating-btn-secondary {
+  --btn-bg: var(--gray-50);
+  --btn-color: var(--gray-700);
+  --btn-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --btn-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.15);
+  
+  background: var(--btn-bg);
+  color: var(--btn-color);
+  border: 2px solid var(--gray-200);
+  box-shadow: var(--btn-shadow);
+}
+
+.floating-btn-secondary:hover {
+  background: var(--gray-200);
+  border-color: var(--gray-300);
+  box-shadow: var(--btn-shadow-hover);
+}
+
+/* Floating Row Layout */
+.floating-row {
+  --row-gap: var(--float-spacing);
+  --row-align: end;
+  
+  display: flex;
+  gap: var(--row-gap);
+  align-items: var(--row-align);
+  flex-wrap: wrap;
+}
+
+/* Floating Textarea */
+.floating-textarea {
+  --textarea-min-height: 120px;
+  --textarea-resize: vertical;
+  
+  min-height: var(--textarea-min-height);
+  resize: var(--textarea-resize);
+  font-family: inherit;
+}
+
+/* Responsive Floating */
+@media (max-width: 768px) {
+  :root {
+    --float-spacing: 1rem;
+    --container-padding: 1.5rem;
+  }
+  
+  .floating-grid {
+    --grid-columns: 1fr;
+  }
+  
+  .floating-grid-2,
+  .floating-grid-3,
+  .floating-grid-4 {
+    --grid-columns: 1fr;
+  }
+  
+  .floating-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .floating-actions {
+    --actions-justify: stretch;
+    flex-direction: column;
+  }
+  
+  .floating-section {
+    --section-padding: 1.5rem;
+  }
+}
+
+/* Import CSV Button Styling */
+.import-csv-btn {
+  --btn-bg: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  --btn-shadow: 0 4px 12px rgba(245, 158, 11, 0.3) !important;
+  --btn-shadow-hover: 0 8px 25px rgba(245, 158, 11, 0.4) !important;
+  
+  background: var(--btn-bg);
+  box-shadow: var(--btn-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.import-csv-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.6s ease;
+}
+
+.import-csv-btn:hover {
+  box-shadow: var(--btn-shadow-hover);
+  transform: translateY(-3px) scale(1.05);
+}
+
+.import-csv-btn:hover::after {
+  left: 100%;
+}
+
+.import-csv-btn svg {
+  transition: var(--float-transition);
+}
+
+.import-csv-btn:hover svg {
+  transform: rotate(10deg) scale(1.1);
+}
+
+/* Add Subject Button Styling */
+.add-subject-btn {
+  --btn-bg: linear-gradient(135deg, #10b981, #059669) !important;
+  --btn-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+  --btn-shadow-hover: 0 8px 25px rgba(16, 185, 129, 0.4) !important;
+  
+  background: var(--btn-bg);
+  box-shadow: var(--btn-shadow);
+}
+
+.add-subject-btn:hover {
+  box-shadow: var(--btn-shadow-hover);
+}
+
+.add-subject-btn:hover svg {
+  transform: rotate(90deg) scale(1.1);
+}
+
+/* Header Actions Layout */
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+/* Floating Animation */
+@keyframes floatIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+
+.import-csv-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  background-size: 200px 100%;
+  animation: shimmer 2s infinite;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.import-csv-btn:hover::before {
+  opacity: 1;
+}
+
+.floating-container,
+.floating-section {
+  animation: floatIn 0.4s ease-out;
+}
+
+.floating-section:nth-child(2) { animation-delay: 0.1s; }
+.floating-section:nth-child(3) { animation-delay: 0.2s; }
+.floating-section:nth-child(4) { animation-delay: 0.3s; }

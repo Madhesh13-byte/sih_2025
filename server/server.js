@@ -69,9 +69,20 @@ const db = new Pool({
           id SERIAL PRIMARY KEY,
           user_id INTEGER REFERENCES users(id),
           certificate_name VARCHAR(255) NOT NULL,
-          upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          status VARCHAR(20) DEFAULT 'pending'
         )
       `);
+      
+      // Add status column if it doesn't exist (for existing tables)
+      try {
+        await db.query(`
+          ALTER TABLE certificates 
+          ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'
+        `);
+      } catch (error) {
+        console.log('Status column already exists or error adding it:', error.message);
+      }
       
       // Add sample certificates for some students
       const userIds = await db.query('SELECT id FROM users WHERE role = $1 ORDER BY id', ['student']);
@@ -1016,7 +1027,8 @@ app.post('/api/certificates/upload', authenticateToken, async (req, res) => {
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id),
         certificate_name VARCHAR(255) NOT NULL,
-        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'pending'
       )
     `);
     
@@ -1034,8 +1046,672 @@ app.post('/api/certificates/upload', authenticateToken, async (req, res) => {
   }
 });
 
+// Get students with certificates for CC staff
+app.get('/api/cc-students-certificates', authenticateToken, async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        u.id,
+        u.name,
+        u.register_no,
+        u.department,
+        COUNT(c.id) as total_certificates,
+        COUNT(CASE WHEN c.status = 'approved' THEN 1 END) as approved_certificates,
+        COUNT(CASE WHEN c.status = 'pending' THEN 1 END) as pending_certificates
+      FROM users u
+      LEFT JOIN certificates c ON u.id = c.user_id
+      WHERE u.role = 'student'
+      GROUP BY u.id, u.name, u.register_no, u.department
+      ORDER BY u.name
+    `;
+    
+    const result = await db.query(query);
+    
+    const students = result.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      register_no: row.register_no,
+      department: row.department,
+      year: 3,
+      totalCertificates: parseInt(row.total_certificates) || 0,
+      approvedCertificates: parseInt(row.approved_certificates) || 0,
+      pendingCertificates: parseInt(row.pending_certificates) || 0
+    }));
+    
+    res.json({ students });
+  } catch (error) {
+    console.error('❌ CC students fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get certificates for a specific student
+app.get('/api/student-certificates/:studentId', authenticateToken, async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    
+    const result = await db.query(
+      'SELECT * FROM certificates WHERE user_id = $1 ORDER BY upload_date DESC',
+      [studentId]
+    );
+    
+    res.json({ certificates: result.rows });
+  } catch (error) {
+    console.error('❌ Student certificates fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Approve/Reject certificate
+app.put('/api/certificates/:certId/approve', authenticateToken, async (req, res) => {
+  try {
+    const { certId } = req.params;
+    const { status } = req.body;
+    
+    const result = await db.query(
+      'UPDATE certificates SET status = $1 WHERE id = $2 RETURNING *',
+      [status, certId]
+    );
+    
+    res.json({ message: `Certificate ${status} successfully`, certificate: result.rows[0] });
+  } catch (error) {
+    console.error('❌ Certificate approval error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Generate Official Portfolio PDF
+app.post('/api/generate-portfolio-pdf', authenticateToken, async (req, res) => {
+  const { studentData, semesterResults, achievements } = req.body;
+  
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: A4; margin: 0.5in; }
+    body { font-family: 'Times New Roman', serif; margin: 0; color: #000; background: white; }
+    .header { padding: 30px 40px; border-bottom: 3px solid #1e3a8a; text-align: center; }
+    .logo { width: 80px; height: 80px; background: #1e3a8a; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; font-weight: bold; margin: 0 auto 20px; }
+    h1 { margin: 0 0 5px 0; font-size: 24px; color: #1e3a8a; font-weight: bold; }
+    h2 { margin: 0; font-size: 20px; color: #1e3a8a; font-weight: bold; letter-spacing: 1px; }
+    h3 { margin: 0 0 15px 0; font-size: 16px; color: #1e3a8a; font-weight: bold; border-bottom: 2px solid #1e3a8a; padding-bottom: 5px; display: inline-block; }
+    .section { padding: 25px 40px; border-bottom: 1px solid #e5e7eb; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .info-item { margin: 5px 0; font-size: 14px; }
+    .summary-flex { display: flex; gap: 30px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: center; }
+    th { background: #f3f4f6; }
+    .achievements-table { font-size: 11px; }
+    .achievements-table td { padding: 6px; }
+    .signatures { display: flex; justify-content: space-between; align-items: end; margin-bottom: 30px; }
+    .signature-box { text-align: center; width: 150px; }
+    .signature-line { height: 60px; border-bottom: 1px solid #000; margin-bottom: 5px; }
+    .seal { width: 80px; height: 80px; border: 2px solid #1e3a8a; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #1e3a8a; }
+    .footer-text { margin: 0; font-size: 11px; font-style: italic; color: #6b7280; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">LOGO</div>
+    <h1>XYZ COLLEGE OF ENGINEERING</h1>
+    <p style="margin: 0 0 20px 0; font-size: 14px; color: #6b7280;">Autonomous Institution | NAAC A+ Accredited</p>
+    <h2>VERIFIED STUDENT ACHIEVEMENT PORTFOLIO</h2>
+  </div>
+  
+  <div class="section">
+    <h3>STUDENT INFORMATION</h3>
+    <div class="info-grid">
+      <div>
+        <p class="info-item"><strong>Register Number:</strong> ${studentData.regNo}</p>
+        <p class="info-item"><strong>Full Name:</strong> ${studentData.fullName}</p>
+        <p class="info-item"><strong>Department:</strong> ${studentData.department}</p>
+      </div>
+      <div>
+        <p class="info-item"><strong>Year:</strong> ${studentData.year}</p>
+        <p class="info-item"><strong>Program:</strong> ${studentData.program}</p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h3>ACADEMIC SUMMARY</h3>
+    <div class="summary-flex">
+      <p style="margin: 0; font-size: 14px;"><strong>CGPA:</strong> ${studentData.cgpa}</p>
+      <p style="margin: 0; font-size: 14px;"><strong>Attendance:</strong> ${studentData.attendance}</p>
+    </div>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Semester</th>
+          <th>GPA</th>
+          <th>Credits</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${semesterResults.map(sem => `
+          <tr>
+            <td>${sem.semester}</td>
+            <td>${sem.gpa}</td>
+            <td>${sem.credits}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="section">
+    <h3>VERIFIED ACHIEVEMENTS & CERTIFICATIONS</h3>
+    
+    <table class="achievements-table">
+      <thead>
+        <tr>
+          <th style="width: 8%;">Sl. No</th>
+          <th style="width: 15%;">Activity Type</th>
+          <th style="width: 30%;">Title / Certificate</th>
+          <th style="width: 20%;">Issuing Body</th>
+          <th style="width: 15%;">Date</th>
+          <th style="width: 12%;">Verified</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${achievements.map(achievement => `
+          <tr>
+            <td>${achievement.sl}</td>
+            <td>${achievement.type}</td>
+            <td>${achievement.title}</td>
+            <td>${achievement.issuer}</td>
+            <td>${achievement.date}</td>
+            <td>${achievement.verified ? '✓' : '✗'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  
+  <div style="padding: 40px 40px 30px 40px;">
+    <div class="signatures">
+      <div class="signature-box">
+        <div class="signature-line"></div>
+        <p style="margin: 0; font-size: 12px; font-weight: bold;">Student Signature</p>
+      </div>
+      <div class="signature-box">
+        <div class="signature-line"></div>
+        <p style="margin: 0; font-size: 12px; font-weight: bold;">Faculty Advisor</p>
+      </div>
+      <div class="signature-box">
+        <div class="signature-line"></div>
+        <p style="margin: 0; font-size: 12px; font-weight: bold;">HOD / Principal</p>
+      </div>
+    </div>
+    
+    <div style="text-align: center; margin-top: 20px;">
+      <div class="seal">COLLEGE SEAL</div>
+      <p class="footer-text">* This portfolio is system-generated and verified by XYZ College of Engineering *</p>
+    </div>
+  </div>
+</body>
+</html>`;
+  
+  try {
+    const browser = await puppeteer.launch({ 
+      headless: true, 
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      timeout: 60000
+    });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(60000);
+    
+    await page.setContent(htmlContent, { 
+      waitUntil: 'domcontentloaded',
+      timeout: 30000
+    });
+    
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
+    });
+    
+    await browser.close();
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${studentData.fullName.replace(/\s+/g, '_')}_Official_Portfolio.pdf"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.end(pdf, 'binary');
+  } catch (error) {
+    console.error('Official PDF generation error:', error);
+    res.status(500).json({ error: 'PDF generation failed' });
+  }
+});
+
+// Get academic calendar and day order
+app.get('/api/academic-calendar', authenticateToken, async (req, res) => {
+  try {
+    // Return academic calendar configuration
+    // This can be stored in database and made configurable
+    const calendar = {
+      academicYearStart: '2024-07-01',
+      dayOrderCycle: 5,
+      workingDays: [1, 2, 3, 4, 5], // Monday to Friday
+      holidays: [], // Can be populated from database
+      currentSemester: {
+        start: '2024-07-01',
+        end: '2024-12-31'
+      }
+    };
+    
+    res.json(calendar);
+  } catch (error) {
+    console.error('❌ Academic calendar fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get current day order
+app.get('/api/day-order', authenticateToken, async (req, res) => {
+  try {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    
+    // Skip weekends
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return res.json({ dayOrder: null, isWeekend: true });
+    }
+
+    // Calculate day order based on academic year start
+    const academicYearStart = new Date('2024-07-01');
+    const msPerDay = 24 * 60 * 60 * 1000;
+    
+    let workingDays = 0;
+    let currentDate = new Date(academicYearStart);
+    
+    while (currentDate <= today) {
+      const day = currentDate.getDay();
+      if (day !== 0 && day !== 6) {
+        workingDays++;
+      }
+      currentDate.setTime(currentDate.getTime() + msPerDay);
+    }
+    
+    const dayOrder = ((workingDays - 1) % 5) + 1;
+    
+    res.json({ 
+      dayOrder, 
+      isWeekend: false,
+      workingDay: workingDays,
+      date: today.toISOString().split('T')[0]
+    });
+  } catch (error) {
+    console.error('❌ Day order calculation error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get students assigned to teacher's classes
+app.get('/api/teacher-students/:staffId', authenticateToken, async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    
+    // Simple approach: get all students with certificates
+    const studentsQuery = `
+      SELECT 
+        u.id,
+        u.name,
+        u.register_no,
+        u.department,
+        0 as total_certificates,
+        0 as approved_certificates,
+        0 as pending_certificates
+      FROM users u
+      WHERE u.role = 'student'
+      ORDER BY u.name
+    `;
+    
+    const result = await db.query(studentsQuery);
+    
+    const students = result.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      register_no: row.register_no,
+      department: row.department,
+      year: 3,
+      totalCertificates: 0,
+      approvedCertificates: 0,
+      pendingCertificates: 0
+    }));
+    
+    res.json({ students });
+  } catch (error) {
+    console.error('\u274c Teacher students fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get teacher's schedule for today
+app.get('/api/teacher-schedule', authenticateToken, async (req, res) => {
+  try {
+    const { staff_id, day } = req.query;
+    
+    if (!staff_id || day === undefined) {
+      return res.status(400).json({ error: 'Missing staff_id or day parameter' });
+    }
+    
+    const result = await db.query(
+      'SELECT * FROM timetables WHERE staff_id = $1 AND day_of_week = $2 ORDER BY period_number',
+      [staff_id, day]
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('❌ Teacher schedule fetch error:', error.message);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+// Get approved certificates for student
+app.get('/api/student/approved-certificates', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const result = await db.query(
+      'SELECT certificate_name, upload_date FROM certificates WHERE user_id = $1 AND status = $2 ORDER BY upload_date DESC',
+      [userId, 'approved']
+    );
+    res.json({ certificates: result.rows });
+  } catch (error) {
+    console.error('Certificate fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch certificates' });
+  }
+});
+
+// AI Resume Generation
+app.post('/api/generate-ai-resume', authenticateToken, async (req, res) => {
+  try {
+    const { userInfo, certificates, template } = req.body;
+    
+    // Create prompt for LLM
+    const prompt = `
+Generate a professional resume in JSON format for:
+Name: ${userInfo.name}
+Department: ${userInfo.department}
+Register No: ${userInfo.registerNo}
+
+Approved Certificates:
+${certificates.map(cert => `- ${cert.certificate_name}`).join('\n')}
+
+Generate appropriate:
+1. Professional objective (2-3 lines)
+2. Skills based on certificates
+3. Projects related to certificates
+4. Experience descriptions
+5. Education details
+
+Return JSON in this exact format:
+{
+  "personalInfo": {
+    "name": "${userInfo.name}",
+    "email": "student@college.edu",
+    "phone": "+91-XXXXXXXXXX",
+    "address": "City, State",
+    "linkedin": "linkedin.com/in/username",
+    "github": "github.com/username"
+  },
+  "objective": "Professional objective here",
+  "education": [{
+    "degree": "Bachelor of Technology in ${userInfo.department}",
+    "institution": "College Name",
+    "year": "2021-2025",
+    "cgpa": "8.5"
+  }],
+  "experience": [{
+    "title": "Relevant position",
+    "company": "Company/Project",
+    "duration": "Duration",
+    "description": "Description based on certificates"
+  }],
+  "skills": ["skill1", "skill2", "skill3"],
+  "projects": [{
+    "name": "Project name",
+    "description": "Project description",
+    "technologies": "Technologies used"
+  }]
+}
+`;
+
+    // For demo, return structured data based on certificates
+    // In production, integrate with OpenAI, Gemini, or other LLM APIs
+    const aiGeneratedResume = generateResumeFromCertificates(userInfo, certificates);
+    
+    res.json({ resumeData: aiGeneratedResume });
+  } catch (error) {
+    console.error('AI resume generation error:', error);
+    res.status(500).json({ error: 'AI generation failed' });
+  }
+});
+
+// Helper function to generate resume from certificates
+function generateResumeFromCertificates(userInfo, certificates) {
+  const skills = [];
+  const projects = [];
+  const experience = [];
+  
+  // Extract skills from certificate names
+  certificates.forEach(cert => {
+    const certName = cert.certificate_name.toLowerCase();
+    if (certName.includes('python')) skills.push('Python Programming');
+    if (certName.includes('java')) skills.push('Java Development');
+    if (certName.includes('web')) skills.push('Web Development');
+    if (certName.includes('ai') || certName.includes('machine learning')) skills.push('Machine Learning', 'Artificial Intelligence');
+    if (certName.includes('cloud') || certName.includes('aws')) skills.push('Cloud Computing', 'AWS');
+    if (certName.includes('database') || certName.includes('sql')) skills.push('Database Management', 'SQL');
+  });
+  
+  // Generate projects based on certificates
+  if (certificates.length > 0) {
+    projects.push({
+      name: `${userInfo.department} Certification Project`,
+      description: `Developed project demonstrating skills from ${certificates.length} certified courses`,
+      technologies: skills.slice(0, 3).join(', ')
+    });
+  }
+  
+  return {
+    personalInfo: {
+      name: userInfo.name,
+      email: `${userInfo.registerNo}@college.edu`,
+      phone: '+91-XXXXXXXXXX',
+      address: 'City, State, India',
+      linkedin: 'linkedin.com/in/profile',
+      github: 'github.com/username'
+    },
+    objective: `Motivated ${userInfo.department} student with ${certificates.length} certified skills seeking opportunities to apply technical knowledge in real-world projects. Passionate about continuous learning and professional development.`,
+    education: [{
+      degree: `Bachelor of Technology in ${userInfo.department}`,
+      institution: 'College of Engineering',
+      year: '2021-2025',
+      cgpa: '8.5'
+    }],
+    experience: certificates.length > 2 ? [{
+      title: 'Technical Intern',
+      company: 'Technology Company',
+      duration: 'Summer 2024',
+      description: `Applied certified skills in ${skills.slice(0, 2).join(' and ')} to contribute to real-world projects`
+    }] : [{
+      title: 'Project Developer',
+      company: 'Academic Project',
+      duration: '2024',
+      description: 'Developed projects using certified technical skills'
+    }],
+    skills: [...new Set(skills)], // Remove duplicates
+    projects,
+    certifications: certificates.map(cert => cert.certificate_name)
+  };
+}
+
+// Generate Resume PDF
+app.post('/api/generate-resume-pdf', authenticateToken, async (req, res) => {
+  const { template = 'modern', ...resumeData } = req.body;
+  
+  const getTemplateHTML = (template, data) => {
+    const templates = {
+      modern: `
+        <style>
+          body { font-family: 'Segoe UI', sans-serif; color: #2d3748; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; }
+          .name { font-size: 28px; font-weight: 300; margin-bottom: 10px; }
+          .contact { font-size: 14px; opacity: 0.9; }
+          .section { margin: 25px 0; }
+          .section-title { font-size: 18px; font-weight: 600; color: #667eea; border-bottom: 2px solid #667eea; padding-bottom: 8px; margin-bottom: 15px; }
+          .item { margin-bottom: 15px; padding-left: 15px; border-left: 3px solid #e2e8f0; }
+          .item-title { font-weight: 600; color: #2d3748; font-size: 16px; }
+          .item-subtitle { color: #718096; font-size: 14px; margin-top: 2px; }
+          .skills-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+          .skill-item { background: #f7fafc; padding: 8px 12px; border-radius: 20px; text-align: center; font-size: 13px; }
+        </style>`,
+      
+      classic: `
+        <style>
+          body { font-family: 'Times New Roman', serif; color: #000; }
+          .header { text-align: center; border-bottom: 3px double #000; padding-bottom: 20px; margin-bottom: 25px; }
+          .name { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
+          .contact { font-size: 12px; }
+          .section-title { font-size: 16px; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; margin: 20px 0 10px 0; }
+          .item { margin-bottom: 12px; }
+          .item-title { font-weight: bold; }
+          .item-subtitle { font-style: italic; }
+          .skills-list { columns: 2; }
+        </style>`,
+      
+      creative: `
+        <style>
+          body { font-family: 'Arial', sans-serif; color: #2c3e50; }
+          .header { background: #e74c3c; color: white; padding: 25px; border-radius: 10px; margin-bottom: 20px; }
+          .name { font-size: 26px; font-weight: bold; }
+          .section-title { background: #3498db; color: white; padding: 8px 15px; border-radius: 5px; font-weight: bold; }
+          .item { background: #ecf0f1; padding: 12px; margin: 8px 0; border-radius: 5px; border-left: 4px solid #e74c3c; }
+          .skill-item { background: #f39c12; color: white; padding: 5px 10px; border-radius: 15px; display: inline-block; margin: 3px; }
+        </style>`,
+      
+      minimal: `
+        <style>
+          body { font-family: 'Helvetica', sans-serif; color: #333; line-height: 1.6; }
+          .header { margin-bottom: 30px; }
+          .name { font-size: 32px; font-weight: 100; margin-bottom: 5px; }
+          .contact { font-size: 14px; color: #666; }
+          .section-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin: 25px 0 10px 0; }
+          .item { margin-bottom: 15px; }
+          .item-title { font-weight: 500; }
+          .item-subtitle { color: #666; font-size: 13px; }
+          .skills-list { font-size: 14px; }
+        </style>`
+    };
+    
+    return templates[template] || templates.modern;
+  };
+  
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    @page { size: A4; margin: 0.5in; }
+    ${getTemplateHTML(template, resumeData)}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">${resumeData.personalInfo.name}</div>
+    <div class="contact">
+      ${resumeData.personalInfo.email} | ${resumeData.personalInfo.phone} | ${resumeData.personalInfo.address}<br>
+      ${resumeData.personalInfo.linkedin ? 'LinkedIn: ' + resumeData.personalInfo.linkedin : ''}
+      ${resumeData.personalInfo.github ? ' | GitHub: ' + resumeData.personalInfo.github : ''}
+    </div>
+  </div>
+  
+  ${resumeData.objective ? `
+  <div class="section">
+    <div class="section-title">OBJECTIVE</div>
+    <div>${resumeData.objective}</div>
+  </div>
+  ` : ''}
+  
+  <div class="section">
+    <div class="section-title">EDUCATION</div>
+    ${resumeData.education.map(edu => `
+      <div class="item">
+        <div class="item-title">${edu.degree}</div>
+        <div class="item-subtitle">${edu.institution} | ${edu.year} ${edu.cgpa ? '| CGPA: ' + edu.cgpa : ''}</div>
+      </div>
+    `).join('')}
+  </div>
+  
+  ${resumeData.experience.some(exp => exp.title) ? `
+  <div class="section">
+    <div class="section-title">EXPERIENCE</div>
+    ${resumeData.experience.filter(exp => exp.title).map(exp => `
+      <div class="item">
+        <div class="item-title">${exp.title}</div>
+        <div class="item-subtitle">${exp.company} | ${exp.duration}</div>
+        ${exp.description ? `<div class="item-description">${exp.description}</div>` : ''}
+      </div>
+    `).join('')}
+  </div>
+  ` : ''}
+  
+  ${resumeData.skills.filter(skill => skill).length > 0 ? `
+  <div class="section">
+    <div class="section-title">SKILLS</div>
+    <div class="skills-list">
+      ${resumeData.skills.filter(skill => skill).map(skill => `<span class="skill-tag">${skill}</span>`).join('')}
+    </div>
+  </div>
+  ` : ''}
+  
+  ${resumeData.projects.some(proj => proj.name) ? `
+  <div class="section">
+    <div class="section-title">PROJECTS</div>
+    ${resumeData.projects.filter(proj => proj.name).map(proj => `
+      <div class="item">
+        <div class="item-title">${proj.name}</div>
+        ${proj.description ? `<div class="item-description">${proj.description}</div>` : ''}
+        ${proj.technologies ? `<div class="item-subtitle">Technologies: ${proj.technologies}</div>` : ''}
+      </div>
+    `).join('')}
+  </div>
+  ` : ''}
+</body>
+</html>`;
+  
+  try {
+    const browser = await puppeteer.launch({ 
+      headless: true, 
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    
+    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
+    
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' }
+    });
+    
+    await browser.close();
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${resumeData.personalInfo.name.replace(/\\s+/g, '_')}_Resume.pdf"`);
+    res.end(pdf, 'binary');
+  } catch (error) {
+    console.error('Resume PDF generation error:', error);
+    res.status(500).json({ error: 'PDF generation failed' });
+  }
+});
+
 // Setup portfolio routes
-setupPortfolioRoutes(app, authenticateToken);
+setupPortfolioRoutes(app, authenticateToken, db);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

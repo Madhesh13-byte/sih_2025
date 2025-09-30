@@ -1,10 +1,13 @@
 import React from 'react';
 import { BookOpen, Users, Calendar } from 'lucide-react';
+import RealTimeScheduleNotification from './RealTimeScheduleNotification';
 
 function OverviewSection({ user, assignments }) {
   return (
     <div className="overview-section">
       <h2>Welcome back, {user?.name}!</h2>
+      
+      <RealTimeScheduleNotification user={user} />
       
       <div className="overview-stats">
         <div className="stat-card">

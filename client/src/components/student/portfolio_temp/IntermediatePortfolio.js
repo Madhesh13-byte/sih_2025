@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Trophy,
   FileText,
@@ -17,35 +17,15 @@ import {
 
 const IntermediatePortfolio = ({ user, isModal = false, onDownload }) => {
   const progressPercentage = 75;
-  
-  const [studentData] = React.useState({
-    name: 'John Doe',
-    regNo: 'CS2021001',
-    department: 'Computer Science',
+  const [qrData, setQrData] = useState(null);
+  const [studentData, setStudentData] = useState({
+    name: user?.name || 'Loading...',
+    regNo: user?.register_no || 'Loading...',
+    department: user?.department || 'Loading...',
     year: '3rd Year',
-    level: 'Intermediate',
     points: 850,
     maxPoints: 1000
   });
-
-  const [achievements] = React.useState({
-    academics: [
-      { title: 'Data Structures & Algorithms - A Grade', status: 'Completed', date: 'Dec 2024' },
-      { title: 'Database Management Systems - A+ Grade', status: 'Completed', date: 'Nov 2024' },
-      { title: 'Web Development - A Grade', status: 'Completed', date: 'Oct 2024' },
-      { title: 'Machine Learning Basics - B+ Grade', status: 'Completed', date: 'Sep 2024' }
-    ],
-    extracurricular: [
-      { title: 'Coding Club President - 2023', status: 'Active', date: '2023' },
-      { title: 'Hackathon Winner - TechFest 2023', status: 'Won', date: 'Mar 2023' },
-      { title: 'Volunteer - Community Service Program', status: 'Completed', date: '2023' },
-      { title: 'Technical Workshop Organizer', status: 'Organized', date: '2024' }
-    ]
-  });
-
-  const [badges] = React.useState([
-    'Problem Solver', 'Team Leader', 'Innovation Award', 'Best Project'
-  ]);
 
   const downloadRef = React.useRef(null);
 
@@ -53,16 +33,32 @@ const IntermediatePortfolio = ({ user, isModal = false, onDownload }) => {
     try {
       console.log('🚀 Starting PDF generation for Intermediate Portfolio...');
       
-      const response = await fetch('http://localhost:5000/api/generate-intermediate-portfolio-pdf', {
+      const achievements = {
+        academics: [
+          { title: 'Data Structures & Algorithms - A Grade' },
+          { title: 'Database Management Systems - A+ Grade' },
+          { title: 'Web Development - A Grade' },
+          { title: 'Machine Learning Basics - B+ Grade' }
+        ],
+        extracurricular: [
+          { title: 'Coding Club President - 2023' },
+          { title: 'Hackathon Winner - TechFest 2023' },
+          { title: 'Volunteer - Community Service Program' },
+          { title: 'Technical Workshop Organizer' }
+        ]
+      };
+      
+      const response = await fetch('/api/generate-intermediate-portfolio-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ studentData, achievements, badges })
+        body: JSON.stringify({ studentData, achievements })
       });
       
       if (response.ok) {
+        console.log('✅ PDF generated successfully!');
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -72,7 +68,6 @@ const IntermediatePortfolio = ({ user, isModal = false, onDownload }) => {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        console.log('✅ Intermediate PDF downloaded successfully!');
       } else {
         console.error('❌ PDF generation failed');
         alert('PDF generation failed');
@@ -88,6 +83,42 @@ const IntermediatePortfolio = ({ user, isModal = false, onDownload }) => {
       onDownload(() => downloadRef.current);
     }
   }, [onDownload]);
+
+  // Update student data when user prop changes
+  useEffect(() => {
+    if (user) {
+      setStudentData({
+        name: user.name,
+        regNo: user.register_no,
+        department: user.department
+      });
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const generateQR = async () => {
+      if (qrData) return;
+      try {
+        console.log('🔄 Generating QR code for Intermediate portfolio...');
+        const response = await fetch('/api/generate-portfolio', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ portfolioType: 'Intermediate' })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Intermediate QR data received:', data);
+          setQrData(data);
+        }
+      } catch (error) {
+        console.error('QR generation failed:', error);
+      }
+    };
+    generateQR();
+  }, [qrData]);
 
   return (
     <div style={{
@@ -169,15 +200,15 @@ const IntermediatePortfolio = ({ user, isModal = false, onDownload }) => {
               }}>
                 <div>
                   <p style={{ margin: '5px 0', color: 'white', fontWeight: '500' }}>
-                    <span style={{ color: '#bfdbfe' }}>Name:</span> John Doe
+                    <span style={{ color: '#bfdbfe' }}>Name:</span> {studentData.name}
                   </p>
                   <p style={{ margin: '5px 0', color: 'white', fontWeight: '500' }}>
-                    <span style={{ color: '#bfdbfe' }}>Dept:</span> Computer Science
+                    <span style={{ color: '#bfdbfe' }}>Dept:</span> {studentData.department}
                   </p>
                 </div>
                 <div>
                   <p style={{ margin: '5px 0', color: 'white', fontWeight: '500' }}>
-                    <span style={{ color: '#bfdbfe' }}>Reg No:</span> CS2021001
+                    <span style={{ color: '#bfdbfe' }}>Reg No:</span> {studentData.regNo}
                   </p>
                   <p style={{ margin: '5px 0', color: 'white', fontWeight: '500' }}>
                     <span style={{ color: '#bfdbfe' }}>Year:</span> 3rd Year
@@ -506,6 +537,52 @@ const IntermediatePortfolio = ({ user, isModal = false, onDownload }) => {
               <Phone size={16} />
               Call Me
             </button>
+          </div>
+        </div>
+
+        {/* QR Code Section */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: '12px',
+          padding: '25px',
+          boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+          border: '1px solid #e2e8f0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <h3 style={{ margin: '0 0 5px 0', color: '#2563eb', fontSize: '18px' }}>Portfolio Verification</h3>
+            <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Scan QR code to verify authenticity</p>
+          </div>
+          <div style={{
+            padding: '15px',
+            background: 'white',
+            border: '2px solid #2563eb',
+            borderRadius: '12px'
+          }}>
+            {qrData ? (
+              <div style={{ textAlign: 'center' }}>
+                <div dangerouslySetInnerHTML={{
+                  __html: `<svg width="100" height="100" viewBox="0 0 25 25">
+                    <rect width="25" height="25" fill="white"/>
+                    <g fill="#2563eb">
+                      <rect x="0" y="0" width="7" height="7"/>
+                      <rect x="18" y="0" width="7" height="7"/>
+                      <rect x="0" y="18" width="7" height="7"/>
+                      <rect x="2" y="2" width="3" height="3" fill="white"/>
+                      <rect x="20" y="2" width="3" height="3" fill="white"/>
+                      <rect x="2" y="20" width="3" height="3" fill="white"/>
+                      <rect x="9" y="9" width="7" height="7"/>
+                      <rect x="11" y="11" width="3" height="3" fill="white"/>
+                    </g>
+                  </svg>`
+                }} />
+                <p style={{ margin: '8px 0 0 0', fontSize: '10px', color: '#64748b' }}>ID: {qrData.portfolioId.slice(-6)}</p>
+              </div>
+            ) : (
+              <div style={{ width: '100px', height: '100px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#2563eb' }}>Loading...</div>
+            )}
           </div>
         </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { FileText, Star, Award, Download } from 'lucide-react';
 import BeginnerPortfolio from './portfolio_temp/BeginnerPortfolio';
 import IntermediatePortfolio from './portfolio_temp/IntermediatePortfolio';
-import AdvancePortfolio from './portfolio_temp/AdvancePortfolio';
+import AdvancedPortfolio from './portfolio_temp/AdvancePortfolio';
 
 const PortfolioSection = ({ user }) => {
   const [activePortfolio, setActivePortfolio] = useState('beginner');
@@ -25,7 +25,7 @@ const PortfolioSection = ({ user }) => {
       case 'intermediate':
         return <IntermediatePortfolio user={user} isModal={false} onDownload={handleDownloadFunction} />;
       case 'advanced':
-        return <AdvancePortfolio user={user} isModal={false} onDownload={handleDownloadFunction} />;
+        return <AdvancedPortfolio user={user} isModal={false} onDownload={handleDownloadFunction} />;
       default:
         return null;
     }
@@ -148,7 +148,9 @@ const PortfolioSection = ({ user }) => {
               padding: '14px 24px',
               background: activePortfolio === 'beginner' 
                 ? 'linear-gradient(135deg, #065f46, #10b981)' 
-                : 'linear-gradient(135deg, #0891b2, #0e7490)',
+                : activePortfolio === 'intermediate'
+                ? 'linear-gradient(135deg, #0891b2, #0e7490)'
+                : 'linear-gradient(135deg, #7c2d12, #dc2626)',
               color: 'white',
               border: 'none',
               borderRadius: '12px',
@@ -157,20 +159,26 @@ const PortfolioSection = ({ user }) => {
               fontWeight: '700',
               boxShadow: activePortfolio === 'beginner'
                 ? '0 8px 25px rgba(6, 95, 70, 0.4)'
-                : '0 8px 25px rgba(8, 145, 178, 0.4)',
+                : activePortfolio === 'intermediate'
+                ? '0 8px 25px rgba(8, 145, 178, 0.4)'
+                : '0 8px 25px rgba(124, 45, 18, 0.4)',
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
             }}
             onMouseEnter={(e) => {
               e.target.style.transform = 'translateY(-2px) scale(1.05)';
               e.target.style.boxShadow = activePortfolio === 'beginner'
                 ? '0 12px 30px rgba(6, 95, 70, 0.5)'
-                : '0 12px 30px rgba(8, 145, 178, 0.5)';
+                : activePortfolio === 'intermediate'
+                ? '0 12px 30px rgba(8, 145, 178, 0.5)'
+                : '0 12px 30px rgba(124, 45, 18, 0.5)';
             }}
             onMouseLeave={(e) => {
               e.target.style.transform = 'translateY(0) scale(1)';
               e.target.style.boxShadow = activePortfolio === 'beginner'
                 ? '0 8px 25px rgba(6, 95, 70, 0.4)'
-                : '0 8px 25px rgba(8, 145, 178, 0.4)';
+                : activePortfolio === 'intermediate'
+                ? '0 8px 25px rgba(8, 145, 178, 0.4)'
+                : '0 8px 25px rgba(124, 45, 18, 0.4)';
             }}
           >
             <Download size={18} />

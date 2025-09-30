@@ -21,6 +21,8 @@ import AcademicSection from './AcademicSection';
 import AttendanceSection from './AttendanceSection';
 import CertificatesSection from './CertificatesSection';
 import PortfolioSection from './PortfolioSection';
+import ChatbotSection from './ChatbotSection';
+import './ChatbotSection.css';
 
 function StudentDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('overview');
@@ -96,6 +98,9 @@ function StudentDashboard({ user, logout }) {
           {currentView === 'portfolio' && <PortfolioSection user={user} />}
         </main>
       </div>
+      
+      {/* Chatbot Component */}
+      <ChatbotSection />
     </div>
   );
 }

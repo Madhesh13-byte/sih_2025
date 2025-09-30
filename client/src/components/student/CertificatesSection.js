@@ -174,7 +174,7 @@ function CertificatesSection({ user }) {
     }}>
       {/* Animated Background Gradient */}
       <div style={{
-        position: 'fixed',
+        position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
@@ -188,7 +188,7 @@ function CertificatesSection({ user }) {
       {/* Floating Bubbles */}
       {[...Array(15)].map((_, i) => (
         <div key={`bubble-${i}`} style={{
-          position: 'fixed',
+          position: 'absolute',
           width: `${20 + Math.random() * 60}px`,
           height: `${20 + Math.random() * 60}px`,
           borderRadius: '50%',
@@ -206,7 +206,7 @@ function CertificatesSection({ user }) {
       {/* Geometric Shapes */}
       {[...Array(8)].map((_, i) => (
         <div key={`shape-${i}`} style={{
-          position: 'fixed',
+          position: 'absolute',
           width: `${15 + Math.random() * 30}px`,
           height: `${15 + Math.random() * 30}px`,
           background: `linear-gradient(45deg, rgba(118, 75, 162, 0.2), rgba(102, 126, 234, 0.2))`,
@@ -224,7 +224,7 @@ function CertificatesSection({ user }) {
       {/* Sparkle Effects */}
       {[...Array(20)].map((_, i) => (
         <div key={`sparkle-${i}`} style={{
-          position: 'fixed',
+          position: 'absolute',
           width: '3px',
           height: '3px',
           background: '#ffd700',
@@ -242,7 +242,7 @@ function CertificatesSection({ user }) {
       {/* Gradient Orbs */}
       {[...Array(5)].map((_, i) => (
         <div key={`orb-${i}`} style={{
-          position: 'fixed',
+          position: 'absolute',
           width: `${80 + Math.random() * 120}px`,
           height: `${80 + Math.random() * 120}px`,
           borderRadius: '50%',

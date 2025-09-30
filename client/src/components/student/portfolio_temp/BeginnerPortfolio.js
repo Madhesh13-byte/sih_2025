@@ -1,21 +1,66 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CheckCircle } from 'lucide-react';
 
 const BeginnerPortfolio = ({ user, isModal = false, onDownload }) => {
-  const [studentData] = useState({
-    name: 'John Doe',
-    regNo: '20IT101',
-    department: 'Information Technology',
+  const [studentData, setStudentData] = useState({
+    name: user?.name || 'Loading...',
+    regNo: user?.register_no || 'Loading...',
+    department: user?.department || 'Loading...',
     year: '3',
     level: 'Beginner',
     points: 45,
     maxPoints: 100
   });
 
+  // Update student data when user prop changes
+  useEffect(() => {
+    if (user) {
+      setStudentData({
+        name: user.name,
+        regNo: user.register_no,
+        department: user.department,
+        year: '3',
+        level: 'Beginner',
+        points: 45,
+        maxPoints: 100
+      });
+    }
+  }, [user]);
+
   const [certificates] = useState([
     { title: 'Workshop on AI', date: 'Jan 2025', status: 'Verified' },
     { title: 'NPTEL Course on DBMS', date: 'Dec 2024', status: 'Verified' }
   ]);
+
+  const [qrData, setQrData] = useState(null);
+
+  useEffect(() => {
+    const generateQR = async () => {
+      if (qrData) return; // Prevent duplicate calls
+      try {
+        console.log('🔄 Generating QR code for Beginner portfolio...');
+        const response = await fetch('/api/generate-portfolio', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ portfolioType: 'Beginner' })
+        });
+        console.log('📡 Response status:', response.status);
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ QR data received:', data);
+          setQrData(data);
+        } else {
+          console.error('❌ Response not ok:', response.status, response.statusText);
+        }
+      } catch (error) {
+        console.error('💥 QR generation failed:', error);
+      }
+    };
+    generateQR();
+  }, [qrData]);
 
   const progressPercentage = (studentData.points / studentData.maxPoints) * 100;
 
@@ -26,7 +71,7 @@ const BeginnerPortfolio = ({ user, isModal = false, onDownload }) => {
       console.log('🚀 Starting PDF generation for Beginner Portfolio...');
       console.log('📊 Portfolio data:', { name: studentData.name, certificates: certificates.length, level: studentData.level });
       
-      const response = await fetch('http://localhost:5000/api/generate-beginner-portfolio-pdf', {
+      const response = await fetch('/api/generate-beginner-portfolio-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -248,6 +293,67 @@ const BeginnerPortfolio = ({ user, isModal = false, onDownload }) => {
             <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#666' }}>
               {studentData.points}/{studentData.maxPoints} points to next level
             </p>
+          </div>
+
+          {/* QR Code Section */}
+          <div style={{
+            padding: '20px',
+            borderBottom: '1px solid #d6f5d6',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div>
+              <h3 style={{ margin: '0 0 5px 0', color: '#065f46', fontSize: '16px' }}>Portfolio Verification</h3>
+              <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>Scan QR code to verify authenticity</p>
+            </div>
+            <div style={{
+              padding: '10px',
+              background: 'white',
+              border: '2px solid #065f46',
+              borderRadius: '8px'
+            }}>
+              {qrData ? (
+                <div style={{ textAlign: 'center' }}>
+                  <div dangerouslySetInnerHTML={{
+                    __html: `<svg width="80" height="80" viewBox="0 0 25 25">
+                      <rect width="25" height="25" fill="white"/>
+                      <g fill="#065f46">
+                        <rect x="0" y="0" width="7" height="7"/>
+                        <rect x="18" y="0" width="7" height="7"/>
+                        <rect x="0" y="18" width="7" height="7"/>
+                        <rect x="2" y="2" width="3" height="3" fill="white"/>
+                        <rect x="20" y="2" width="3" height="3" fill="white"/>
+                        <rect x="2" y="20" width="3" height="3" fill="white"/>
+                        <rect x="8" y="0" width="1" height="1"/>
+                        <rect x="10" y="0" width="1" height="1"/>
+                        <rect x="12" y="0" width="1" height="1"/>
+                        <rect x="14" y="0" width="1" height="1"/>
+                        <rect x="16" y="0" width="1" height="1"/>
+                        <rect x="8" y="2" width="1" height="1"/>
+                        <rect x="10" y="2" width="1" height="1"/>
+                        <rect x="12" y="2" width="1" height="1"/>
+                        <rect x="14" y="2" width="1" height="1"/>
+                        <rect x="16" y="2" width="1" height="1"/>
+                        <rect x="8" y="4" width="1" height="1"/>
+                        <rect x="10" y="4" width="1" height="1"/>
+                        <rect x="12" y="4" width="1" height="1"/>
+                        <rect x="14" y="4" width="1" height="1"/>
+                        <rect x="16" y="4" width="1" height="1"/>
+                        <rect x="8" y="6" width="1" height="1"/>
+                        <rect x="10" y="6" width="1" height="1"/>
+                        <rect x="12" y="6" width="1" height="1"/>
+                        <rect x="14" y="6" width="1" height="1"/>
+                        <rect x="16" y="6" width="1" height="1"/>
+                      </g>
+                    </svg>`
+                  }} />
+                  <p style={{ margin: '5px 0 0 0', fontSize: '8px', color: '#666' }}>ID: {qrData.portfolioId.slice(-6)}</p>
+                </div>
+              ) : (
+                <div style={{ width: '80px', height: '80px', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#999' }}>Loading...</div>
+              )}
+            </div>
           </div>
 
           {/* Footer */}

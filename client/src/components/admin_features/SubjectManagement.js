@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar, Filter, Hash, Building2 } from 'lucide-react';
 import './styles/SubjectManagement.css';
+import './styles/FloatingForms.css';
 function SubjectManagement({ setCurrentView, setMessage }) {
   const [subjects, setSubjects] = useState([]);
   const [step, setStep] = useState(1);
@@ -224,11 +225,22 @@ function SubjectManagement({ setCurrentView, setMessage }) {
         </button>
         <h2>Subject Management</h2>
         <div className="header-actions">
-          <button className="import-btn" onClick={() => setShowImport(!showImport)}>
-            📁 Import CSV
+          <button className="floating-btn import-csv-btn" onClick={() => setShowImport(!showImport)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14,2 14,8 20,8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10,9 9,9 8,9"/>
+            </svg>
+            Import CSV
           </button>
-          <button className="add-btn" onClick={() => setShowForm(!showForm)}>
-            + Add Subject
+          <button className="floating-btn add-subject-btn" onClick={() => setShowForm(!showForm)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Add Subject
           </button>
         </div>
       </div>
@@ -278,15 +290,17 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                 <button type="button" className="close-btn" onClick={() => setShowForm(false)}>×</button>
               </div>
               
-              <div className="form-body">
-                <div className="form-row">
-                  <div className="select-group-modern">
+              <div className="floating-container">
+                <div className="floating-grid floating-grid-3">
+                  <div className="floating-group">
+                    <label className="floating-label">Department</label>
                     <select
+                      className="floating-select"
                       value={batchData.department}
                       onChange={(e) => setBatchData({...batchData, department: e.target.value})}
                       required
                     >
-                      <option value="">Select Dept</option>
+                      <option value="">Select Department</option>
                       <option value="IT">Information Technology</option>
                       <option value="CSE">Computer Science Engineering</option>
                       <option value="AIDS">Artificial Intelligence & Data Science</option>
@@ -295,11 +309,12 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                       <option value="ECE">Electronics & Communication Engineering</option>
                       <option value="CIVIL">Civil Engineering</option>
                     </select>
-                    <label>Department</label>
                   </div>
                   
-                  <div className="select-group-modern">
+                  <div className="floating-group">
+                    <label className="floating-label">Academic Year</label>
                     <select
+                      className="floating-select"
                       value={batchData.year}
                       onChange={(e) => setBatchData({...batchData, year: e.target.value, semester: ''})}
                       required
@@ -310,11 +325,12 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                       <option value="III">III Year</option>
                       <option value="IV">IV Year</option>
                     </select>
-                    <label>Year</label>
                   </div>
                   
-                  <div className="select-group-modern">
+                  <div className="floating-group">
+                    <label className="floating-label">Semester</label>
                     <select
+                      className="floating-select"
                       value={batchData.semester}
                       onChange={(e) => setBatchData({...batchData, semester: e.target.value})}
                       required
@@ -346,14 +362,13 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                         </>
                       )}
                     </select>
-                    <label>Semester</label>
                   </div>
                 </div>
               </div>
               
-              <div className="form-actions-modern">
-                <button type="button" className="cancel-btn" onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="create-btn">Next: Add Subjects</button>
+              <div className="floating-actions">
+                <button type="button" className="floating-btn floating-btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+                <button type="submit" className="floating-btn">Next: Add Subjects</button>
               </div>
             </form>
           ) : (
@@ -363,57 +378,75 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                 <button type="button" className="close-btn" onClick={() => setShowForm(false)}>×</button>
               </div>
               
-              <div className="form-body">
-                <div className="subjects-bulk">
+              <div className="floating-container">
+                <div className="floating-section">
+                  <div className="floating-section-header">
+                    <div className="floating-icon">
+                      <BookOpen size={20} />
+                    </div>
+                    <h3>Subject Details</h3>
+                  </div>
+                  
                   {subjectRows.map((row, index) => (
-                    <div key={index} className="subject-row">
-                      <div className="input-group-modern">
+                    <div key={index} className="floating-grid" style={{ gridTemplateColumns: '2fr 3fr 1fr auto', marginBottom: '1.5rem' }}>
+                      <div className="floating-group">
+                        <label className="floating-label">Subject Code</label>
                         <input
+                          className="floating-input"
                           type="text"
                           value={row.code}
                           onChange={(e) => updateSubjectRow(index, 'code', e.target.value)}
+                          placeholder="e.g., CS101"
                           required
                         />
-                        <label>Subject Code</label>
                       </div>
                       
-                      <div className="input-group-modern">
+                      <div className="floating-group">
+                        <label className="floating-label">Subject Name</label>
                         <input
+                          className="floating-input"
                           type="text"
                           value={row.name}
                           onChange={(e) => updateSubjectRow(index, 'name', e.target.value)}
+                          placeholder="e.g., Programming Fundamentals"
                           required
                         />
-                        <label>Subject Name</label>
                       </div>
                       
-                      <div className="input-group-modern credits-input">
+                      <div className="floating-group">
+                        <label className="floating-label">Credits</label>
                         <input
+                          className="floating-input"
                           type="number"
                           value={row.credits}
                           onChange={(e) => updateSubjectRow(index, 'credits', e.target.value)}
                           min="1"
                           max="6"
+                          placeholder="4"
+                          style={{ textAlign: 'center' }}
                           required
                         />
-                        <label>Credits</label>
                       </div>
                       
                       {subjectRows.length > 1 && (
-                        <button type="button" className="remove-row-btn" onClick={() => removeSubjectRow(index)}>×</button>
+                        <div style={{ display: 'flex', alignItems: 'end' }}>
+                          <button type="button" className="floating-btn" onClick={() => removeSubjectRow(index)} style={{ background: '#ef4444', padding: '0.75rem', borderRadius: '50%', minWidth: 'auto' }}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
                   
-                  <button type="button" className="add-row-btn" onClick={addSubjectRow}>
+                  <button type="button" className="floating-btn floating-btn-secondary" onClick={addSubjectRow} style={{ marginTop: '1rem' }}>
                     + Add Another Subject
                   </button>
                 </div>
               </div>
               
-              <div className="form-actions-modern">
-                <button type="button" className="cancel-btn" onClick={() => setStep(1)}>Back</button>
-                <button type="submit" className="create-btn">Create All Subjects</button>
+              <div className="floating-actions">
+                <button type="button" className="floating-btn floating-btn-secondary" onClick={() => setStep(1)}>Back</button>
+                <button type="submit" className="floating-btn">Create All Subjects</button>
               </div>
             </form>
           )}
@@ -565,7 +598,7 @@ function SubjectManagement({ setCurrentView, setMessage }) {
                   <td>
                     <button className="delete-btn" onClick={async () => {
                       try {
-                        const response = await fetch(`http://localhost:5000/api/subjects/${subject.id}`, {
+                        const response = await fetch(`/api/subjects/${subject.id}`, {
                           method: 'DELETE',
                           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                         });

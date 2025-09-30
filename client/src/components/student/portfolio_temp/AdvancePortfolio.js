@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Trophy,
   FileText,
@@ -12,21 +12,14 @@ import {
 } from "lucide-react";
 
 const AdvancedPortfolio = ({ user, isModal = false, onDownload }) => {
-  const [studentData] = React.useState({
-    name: 'John Doe',
-    regNo: '12345',
-    department: 'Information Technology',
-    year: '3',
-    level: 'Advanced',
+  const [qrData, setQrData] = useState(null);
+  const [studentData, setStudentData] = useState({
+    name: user?.name || 'Loading...',
+    regNo: user?.register_no || 'Loading...',
+    department: user?.department || 'Loading...',
+    year: '3rd Year',
     totalPoints: 320
   });
-
-  const [certificates] = React.useState([
-    { title: 'AWS Cloud Practitioner', date: 'Dec 2024' },
-    { title: 'Google Analytics Certified', date: 'Nov 2024' },
-    { title: 'Microsoft Azure Fundamentals', date: 'Oct 2024' },
-    { title: 'Python Programming Certificate', date: 'Sep 2024' }
-  ]);
 
   const downloadRef = React.useRef(null);
 
@@ -34,16 +27,17 @@ const AdvancedPortfolio = ({ user, isModal = false, onDownload }) => {
     try {
       console.log('🚀 Starting PDF generation for Advanced Portfolio...');
       
-      const response = await fetch('http://localhost:5000/api/generate-advanced-portfolio-pdf', {
+      const response = await fetch('/api/generate-advanced-portfolio-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({ studentData, certificates })
+        body: JSON.stringify({ studentData })
       });
       
       if (response.ok) {
+        console.log('✅ PDF generated successfully!');
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -53,7 +47,6 @@ const AdvancedPortfolio = ({ user, isModal = false, onDownload }) => {
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        console.log('✅ Advanced PDF downloaded successfully!');
       } else {
         console.error('❌ PDF generation failed');
         alert('PDF generation failed');
@@ -69,6 +62,43 @@ const AdvancedPortfolio = ({ user, isModal = false, onDownload }) => {
       onDownload(() => downloadRef.current);
     }
   }, [onDownload]);
+
+  // Update student data when user prop changes
+  useEffect(() => {
+    if (user) {
+      setStudentData({
+        name: user.name,
+        regNo: user.register_no,
+        department: user.department
+      });
+    }
+  }, [user]);
+
+  useEffect(() => {
+    const generateQR = async () => {
+      if (qrData) return;
+      try {
+        console.log('🔄 Generating QR code for Advanced portfolio...');
+        const response = await fetch('/api/generate-portfolio', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ portfolioType: 'Advanced' })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Advanced QR data received:', data);
+          setQrData(data);
+        }
+      } catch (error) {
+        console.error('QR generation failed:', error);
+      }
+    };
+    generateQR();
+  }, [qrData]);
+
   return (
     <>
       <style jsx>{`
@@ -724,11 +754,11 @@ const AdvancedPortfolio = ({ user, isModal = false, onDownload }) => {
                 <h2>Student Details:</h2>
                 <div className="details-grid">
                   <div>
-                    <p><span>Name:</span> XXXXX</p>
-                    <p><span>Dept:</span> IT</p>
+                    <p><span>Name:</span> {studentData.name}</p>
+                    <p><span>Dept:</span> {studentData.department}</p>
                   </div>
                   <div>
-                    <p><span>Reg No:</span> 12345</p>
+                    <p><span>Reg No:</span> {studentData.regNo}</p>
                     <p><span>Year:</span> 3</p>
                   </div>
                 </div>
@@ -862,6 +892,65 @@ const AdvancedPortfolio = ({ user, isModal = false, onDownload }) => {
                   <Phone size={16} />
                   Call Me
                 </button>
+              </div>
+            </div>
+          </div>
+
+          {/* QR Code Section */}
+          <div className="card">
+            <div className="card-content">
+              <h2 className="section-title">
+                <CheckCircle size={20} />
+                Portfolio Verification
+              </h2>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '20px',
+                background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+                borderRadius: '12px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', fontSize: '18px' }}>Authenticity Verification</h3>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Scan QR code to verify this portfolio's authenticity</p>
+                </div>
+                <div style={{
+                  padding: '15px',
+                  background: 'white',
+                  border: '2px solid #0f172a',
+                  borderRadius: '12px',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.1)'
+                }}>
+                  {qrData ? (
+                    <div style={{ textAlign: 'center' }}>
+                      <div dangerouslySetInnerHTML={{
+                        __html: `<svg width="100" height="100" viewBox="0 0 25 25">
+                          <rect width="25" height="25" fill="white"/>
+                          <g fill="#0f172a">
+                            <rect x="0" y="0" width="7" height="7"/>
+                            <rect x="18" y="0" width="7" height="7"/>
+                            <rect x="0" y="18" width="7" height="7"/>
+                            <rect x="2" y="2" width="3" height="3" fill="white"/>
+                            <rect x="20" y="2" width="3" height="3" fill="white"/>
+                            <rect x="2" y="20" width="3" height="3" fill="white"/>
+                            <rect x="9" y="9" width="7" height="7"/>
+                            <rect x="11" y="11" width="3" height="3" fill="white"/>
+                            <rect x="8" y="0" width="1" height="1"/>
+                            <rect x="10" y="0" width="1" height="1"/>
+                            <rect x="12" y="0" width="1" height="1"/>
+                            <rect x="14" y="0" width="1" height="1"/>
+                            <rect x="16" y="0" width="1" height="1"/>
+                          </g>
+                        </svg>`
+                      }} />
+                      <p style={{ margin: '8px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600' }}>ID: {qrData.portfolioId.slice(-6)}</p>
+                    </div>
+                  ) : (
+                    <div style={{ width: '100px', height: '100px', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#0f172a' }}>Loading...</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

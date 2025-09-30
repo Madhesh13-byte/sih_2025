@@ -3,6 +3,7 @@ import StudentDashboard from './components/student/StudentDashboard';
 import AdminDashboard from './components/admin_features/AdminDashboard';
 import TeacherDashboard from './components/teacher/TeacherDashboard';
 import { LoginPage, AdminLogin } from './components/Login';
+import PortfolioVerification from './components/PortfolioVerification';
 import './App.css';
 
 function App() {
@@ -11,6 +12,13 @@ function App() {
   const [currentPage, setCurrentPage] = useState('login');
 
   useEffect(() => {
+    // Check for verification URL
+    const path = window.location.pathname;
+    if (path.startsWith('/verify/')) {
+      setCurrentPage('verify');
+      return;
+    }
+    
     if (token) {
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       setUser(userData);
@@ -37,6 +45,10 @@ function App() {
 
   if (currentPage === 'admin') {
     return <AdminLogin setToken={setToken} setUser={setUser} setCurrentPage={setCurrentPage} />;
+  }
+
+  if (currentPage === 'verify') {
+    return <PortfolioVerification />;
   }
 
   if (currentPage === 'dashboard' && user) {

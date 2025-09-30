@@ -16,9 +16,10 @@ function CertificatesSection({ user }) {
   
   const fetchStudentsWithCertificates = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/cc-students-certificates', {
+      const response = await fetch(`http://localhost:5000/api/teacher-students/${user?.staff_id}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
+      
       if (response.ok) {
         const data = await response.json();
         setStudents(data.students || []);

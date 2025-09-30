@@ -1,6 +1,118 @@
 const puppeteer = require('puppeteer');
+const { v4: uuidv4 } = require('uuid');
 
-const setupPortfolioRoutes = (app, authenticateToken) => {
+const setupPortfolioRoutes = (app, authenticateToken, db) => {
+
+// Generate QR Code for Portfolio Verification
+app.post('/api/generate-portfolio', authenticateToken, async (req, res) => {
+  try {
+    const { portfolioType } = req.body;
+    const userId = req.user.id;
+    
+    // Generate unique portfolio ID
+    const portfolioId = `${portfolioType.toUpperCase()}_${userId}_${Date.now()}`;
+    
+    // Get user details with error handling
+    let userData = { name: 'Unknown User' };
+    try {
+      const userResult = await db.query('SELECT name, register_no, department FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length > 0) {
+        userData = userResult.rows[0];
+      }
+    } catch (dbError) {
+      console.log('User query error:', dbError.message);
+    }
+    
+    // Store portfolio data in database (create table if not exists)
+    try {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS portfolio_verifications (
+          id SERIAL PRIMARY KEY,
+          portfolio_id VARCHAR(255) UNIQUE,
+          user_id INTEGER,
+          user_name VARCHAR(255),
+          portfolio_type VARCHAR(50),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      await db.query(
+        'INSERT INTO portfolio_verifications (portfolio_id, user_id, user_name, portfolio_type) VALUES ($1, $2, $3, $4)',
+        [portfolioId, userId, userData.name, portfolioType]
+      );
+    } catch (dbError) {
+      console.log('Database storage error:', dbError.message);
+      // Continue without storing - QR will still work
+    }
+    
+    // Create verification URL pointing to local development server
+    const verificationUrl = `http://localhost:3000/verify/${portfolioId}`;
+    
+    console.log(`📱 Generated QR for ${portfolioType} portfolio:`, portfolioId);
+    
+    res.json({
+      portfolioId,
+      verificationUrl,
+      portfolioType,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ QR generation error:', error.message);
+    res.status(500).json({ error: 'QR generation failed: ' + error.message });
+  }
+});
+
+// Verify Portfolio
+app.get('/api/verify-portfolio/:portfolioId', async (req, res) => {
+  try {
+    const { portfolioId } = req.params;
+    console.log('🔍 Verifying portfolio:', portfolioId);
+    
+    // Check if table exists and create if needed
+    try {
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS portfolio_verifications (
+          id SERIAL PRIMARY KEY,
+          portfolio_id VARCHAR(255) UNIQUE,
+          user_id INTEGER,
+          user_name VARCHAR(255),
+          portfolio_type VARCHAR(50),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } catch (createError) {
+      console.log('⚠️ Table creation failed:', createError.message);
+    }
+    
+    // Check if portfolio exists in database
+    try {
+      const result = await db.query(
+        'SELECT * FROM portfolio_verifications WHERE portfolio_id = $1',
+        [portfolioId]
+      );
+      
+      if (result.rows.length > 0) {
+        const portfolio = result.rows[0];
+        console.log('✅ Portfolio found in database');
+        return res.json({
+          verified: true,
+          userName: portfolio.user_name,
+          portfolioType: portfolio.portfolio_type,
+          createdAt: portfolio.created_at
+        });
+      }
+    } catch (dbError) {
+      console.log('⚠️ Database lookup failed:', dbError.message);
+    }
+    
+    console.log('❌ Portfolio not found in database');
+    return res.status(404).json({ error: 'Portfolio not found' });
+  } catch (error) {
+    console.error('❌ Portfolio verification error:', error.message);
+    res.status(500).json({ error: 'Verification failed: ' + error.message });
+  }
+});
+
 
 // Generate Beginner Portfolio PDF
 app.post('/api/generate-beginner-portfolio-pdf', authenticateToken, async (req, res) => {

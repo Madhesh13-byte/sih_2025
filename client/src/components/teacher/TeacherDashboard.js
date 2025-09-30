@@ -22,6 +22,7 @@ import AssignmentsSection from './AssignmentsSection';
 import GradesSection from './GradesSection';
 import AttendanceSection from './AttendanceSection';
 import CertificatesSection from './CertificatesSection';
+import RealTimeScheduleNotification from './RealTimeScheduleNotification';
 import './TeacherDashboard.css';
 
 function TeacherDashboard({ user, logout }) {
@@ -124,6 +125,12 @@ function TeacherDashboard({ user, logout }) {
                 <FileText size={20} /> Certificates
               </button>
             )}
+            <button 
+              className={`nav-item ${currentView === 'portfolio' ? 'active' : ''}`}
+              onClick={() => setCurrentView('portfolio')}
+            >
+              <Download size={20} /> Official Portfolio
+            </button>
           </nav>
         </aside>
 
@@ -134,6 +141,7 @@ function TeacherDashboard({ user, logout }) {
           {currentView === 'grades' && <GradesSection assignments={assignments} />}
           {currentView === 'attendance' && <AttendanceSection assignments={assignments} />}
           {currentView === 'certificates' && isCC && <CertificatesSection user={user} />}
+          {currentView === 'portfolio' && <OfficialPortfolio user={user} />}
         </main>
       </div>
     </div>

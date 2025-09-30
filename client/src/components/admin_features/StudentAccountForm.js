@@ -33,7 +33,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
     formData.append('csvFile', csvFile);
 
     try {
-      const response = await fetch('http://localhost:5000/api/students/import', {
+      const response = await fetch('/api/students/import', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -106,7 +106,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
       const deptCode = batchData.department.toUpperCase().substring(0, 2);
       const yearCode = batchData.year.toString().slice(-2);
       
-      const response = await fetch(`http://localhost:5000/api/admin/next-student-number?dept=${deptCode}&year=${yearCode}`, {
+      const response = await fetch(`/api/admin/next-student-number?dept=${deptCode}&year=${yearCode}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       
@@ -133,7 +133,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
     try {
       const validRows = studentRows.filter(row => row.name && row.day && row.month && row.dobYear);
       const promises = validRows.map(row => 
-        fetch('http://localhost:5000/api/admin/create-student', {
+        fetch('/api/admin/create-student', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
