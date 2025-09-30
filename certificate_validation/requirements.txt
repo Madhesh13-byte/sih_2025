@@ -1,0 +1,12 @@
+pymupdf
+easyocr
+pillow
+pyzbar
+requests
+transformers
+torch
+torchvision
+torchaudio
+rapidfuzz
+pymongo
+opencv-python-headless
