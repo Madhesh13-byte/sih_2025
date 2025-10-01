@@ -14,6 +14,7 @@ import ViewAccounts from './ViewAccounts';
 import SubjectManagement from './SubjectManagement';
 import StaffAssignments from './StaffAssignments';
 import StudentResultsManagement from './StudentResultsManagement';
+import ReportsManagement from './ReportsManagement';
 
 function AdminDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('main');
@@ -152,6 +153,13 @@ function AdminDashboard({ user, logout }) {
         {currentView === 'student-results' && (
           <StudentResultsManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
         )}
+        
+        {currentView === 'reports' && (
+          <div style={{padding: '20px'}}>
+            <h2>Reports Management</h2>
+            <ReportsManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -220,6 +228,10 @@ function MainAdminView({ setCurrentView }) {
             <button className="action-card results-card" onClick={() => setCurrentView('student-results')}>
               <BarChart3 size={20} />
               <span>Results</span>
+            </button>
+            <button className="action-card reports-card" onClick={() => setCurrentView('reports')}>
+              <BarChart3 size={20} />
+              <span>Reports</span>
             </button>
           </div>
         </div>

@@ -23,6 +23,7 @@ import GradesSection from './GradesSection';
 import AttendanceSection from './AttendanceSection';
 import CertificatesSection from './CertificatesSection';
 import RealTimeScheduleNotification from './RealTimeScheduleNotification';
+import TimetableNotification from './TimetableNotification';
 import './TeacherDashboard.css';
 
 function TeacherDashboard({ user, logout }) {
@@ -135,6 +136,7 @@ function TeacherDashboard({ user, logout }) {
         </aside>
 
         <main className="teacher-main">
+          <TimetableNotification user={user} />
           {currentView === 'overview' && <OverviewSection user={user} assignments={assignments} />}
 
           {currentView === 'assignments' && <AssignmentsSection assignments={assignments} />}

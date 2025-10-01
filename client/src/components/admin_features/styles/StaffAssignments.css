@@ -61,6 +61,26 @@
   box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
 }
 
+.cleanup-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--warning);
+  color: white;
+  border: none;
+  padding: 0.875rem 1.5rem;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.cleanup-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(245, 158, 11, 0.4);
+}
+
 .back-btn {
   background: var(--gray-100);
   border: none;
@@ -335,6 +355,22 @@
 .delete-btn:hover {
   background: #dc2626;
   transform: scale(1.1);
+}
+
+.orphaned-row {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  border-left: 4px solid var(--error);
+}
+
+.missing-badge {
+  display: inline-block;
+  background: var(--error);
+  color: white;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {

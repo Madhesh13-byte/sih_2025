@@ -417,6 +417,43 @@ function TimetableManagement({ setCurrentView, setMessage }) {
             </h3>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
+                onClick={async () => {
+                  if (window.confirm('Clean up timetable entries with deleted staff?')) {
+                    try {
+                      const orphanedEntries = timetables.filter(entry => 
+                        !staffMembers.some(staff => staff.staff_id === entry.staff_id)
+                      );
+                      
+                      const deletePromises = orphanedEntries.map(entry => 
+                        fetch(`http://localhost:5000/api/timetables/${entry.id}`, {
+                          method: 'DELETE',
+                          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                        })
+                      );
+                      
+                      await Promise.all(deletePromises);
+                      await fetchTimetables();
+                      setMessage(`✅ Cleaned up ${orphanedEntries.length} orphaned timetable entries`);
+                    } catch (error) {
+                      setMessage('❌ Error cleaning up timetable');
+                    }
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#f59e0b',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Clock size={16} /> Cleanup
+              </button>
+              <button
                 onClick={handleDeleteAllTimetable}
                 style={{
                   display: 'flex',
@@ -430,7 +467,7 @@ function TimetableManagement({ setCurrentView, setMessage }) {
                   cursor: 'pointer'
                 }}
               >
-                <Trash2 size={16} /> Delete Timetable
+                <Trash2 size={16} /> Delete All
               </button>
               <button
                 onClick={() => setShowForm(true)}
@@ -480,15 +517,29 @@ function TimetableManagement({ setCurrentView, setMessage }) {
                         <td key={period.number} style={{ padding: '6px', border: '1px solid #e1e8ed', width: '100px', verticalAlign: 'top' }}>
                           {entry ? (
                             <div style={{
-                              backgroundColor: '#e8f4fd',
+                              backgroundColor: !staffMembers.some(staff => staff.staff_id === entry.staff_id) ? '#ffebee' : '#e8f4fd',
                               padding: '6px',
                               borderRadius: '4px',
                               fontSize: '10px',
                               position: 'relative',
-                              minHeight: '50px'
+                              minHeight: '50px',
+                              border: !staffMembers.some(staff => staff.staff_id === entry.staff_id) ? '1px solid #ef4444' : 'none'
                             }}>
                               <div style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '2px' }}>{entry.subject_code}</div>
-                              <div style={{ color: '#6c757d', marginBottom: '2px' }}>{entry.staff_name.split(' ')[0]}</div>
+                              <div style={{ color: '#6c757d', marginBottom: '2px' }}>
+                                {entry.staff_name.split(' ')[0]}
+                                {!staffMembers.some(staff => staff.staff_id === entry.staff_id) && (
+                                  <span style={{ 
+                                    display: 'inline-block', 
+                                    background: '#ef4444', 
+                                    color: 'white', 
+                                    fontSize: '8px', 
+                                    padding: '1px 3px', 
+                                    borderRadius: '2px', 
+                                    marginLeft: '3px' 
+                                  }}>DEL</span>
+                                )}
+                              </div>
                               {entry.room_number && (
                                 <div style={{ color: '#6c757d' }}>{entry.room_number}</div>
                               )}

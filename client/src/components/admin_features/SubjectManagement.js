@@ -225,6 +225,32 @@ function SubjectManagement({ setCurrentView, setMessage }) {
         </button>
         <h2>Subject Management</h2>
         <div className="header-actions">
+          <button 
+            className="floating-btn delete-all-btn" 
+            onClick={async () => {
+              if (window.confirm('Are you sure you want to delete ALL subjects? This cannot be undone!')) {
+                try {
+                  const response = await fetch('http://localhost:5000/api/subjects/delete-all', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                  });
+                  if (response.ok) {
+                    const result = await response.json();
+                    setMessage(`✅ ${result.message}`);
+                    fetchSubjects();
+                  } else {
+                    setMessage('❌ Failed to delete subjects');
+                  }
+                } catch (error) {
+                  setMessage('❌ Error deleting subjects');
+                }
+              }
+            }}
+            style={{ background: '#ef4444' }}
+          >
+            <Trash2 size={16} />
+            Delete All
+          </button>
           <button className="floating-btn import-csv-btn" onClick={() => setShowImport(!showImport)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>

@@ -55,7 +55,11 @@ function StaffAssignments({ setCurrentView, setMessage }) {
       });
       if (response.ok) {
         const data = await response.json();
-        setAssignments(data);
+        // Filter out assignments with non-existent staff
+        const validAssignments = data.filter(assignment => 
+          staffMembers.some(staff => staff.id === assignment.staff_id)
+        );
+        setAssignments(validAssignments);
       }
     } catch (error) {
       console.error('Failed to fetch assignments');
@@ -86,10 +90,15 @@ function StaffAssignments({ setCurrentView, setMessage }) {
 
   useEffect(() => {
     fetchStaffMembers();
-    fetchAssignments();
     fetchSubjects();
     fetchClasses();
   }, []);
+
+  useEffect(() => {
+    if (staffMembers.length > 0) {
+      fetchAssignments();
+    }
+  }, [staffMembers]);
 
   const handleBatchSubmit = (e) => {
     e.preventDefault();
@@ -177,6 +186,33 @@ function StaffAssignments({ setCurrentView, setMessage }) {
         </button>
         <h2>Staff Assignments</h2>
         <div className="header-actions">
+          <button 
+            className="cleanup-btn" 
+            onClick={async () => {
+              if (window.confirm('Clean up assignments with deleted staff? This will remove orphaned assignments.')) {
+                try {
+                  const orphanedAssignments = assignments.filter(assignment => 
+                    !staffMembers.some(staff => staff.id === assignment.staff_id)
+                  );
+                  
+                  const deletePromises = orphanedAssignments.map(assignment => 
+                    fetch(`http://localhost:5000/api/staff-assignments/${assignment.id}`, {
+                      method: 'DELETE',
+                      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    })
+                  );
+                  
+                  await Promise.all(deletePromises);
+                  await fetchAssignments();
+                  setMessage(`✅ Cleaned up ${orphanedAssignments.length} orphaned assignments`);
+                } catch (error) {
+                  setMessage('❌ Error cleaning up assignments');
+                }
+              }
+            }}
+          >
+            <RefreshCw size={16} /> Cleanup
+          </button>
           <button 
             className="delete-all-btn" 
             onClick={async () => {
@@ -383,35 +419,41 @@ function StaffAssignments({ setCurrentView, setMessage }) {
             </tr>
           </thead>
           <tbody>
-            {assignments.map(assignment => (
-              <tr key={assignment.id}>
-                <td>{assignment.staff_name}</td>
-                <td>{assignment.staff_id}</td>
-                <td>{assignment.subject_name}</td>
-                <td>{assignment.department}</td>
-                <td>{assignment.year}</td>
-                <td>{assignment.semester}</td>
-                <td>{assignment.section}</td>
-                <td>
-                  <button className="delete-btn" onClick={async () => {
-                    try {
-                      const response = await fetch(`http://localhost:5000/api/staff-assignments/${assignment.id}`, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                      });
-                      if (response.ok) {
-                        fetchAssignments();
-                        setMessage('Assignment deleted successfully!');
+            {assignments.map(assignment => {
+              const staffExists = staffMembers.some(staff => staff.id === assignment.staff_id);
+              return (
+                <tr key={assignment.id} className={!staffExists ? 'orphaned-row' : ''}>
+                  <td>
+                    {assignment.staff_name}
+                    {!staffExists && <span className="missing-badge">DELETED</span>}
+                  </td>
+                  <td>{assignment.staff_id}</td>
+                  <td>{assignment.subject_name}</td>
+                  <td>{assignment.department}</td>
+                  <td>{assignment.year}</td>
+                  <td>{assignment.semester}</td>
+                  <td>{assignment.section}</td>
+                  <td>
+                    <button className="delete-btn" onClick={async () => {
+                      try {
+                        const response = await fetch(`http://localhost:5000/api/staff-assignments/${assignment.id}`, {
+                          method: 'DELETE',
+                          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                        });
+                        if (response.ok) {
+                          fetchAssignments();
+                          setMessage('Assignment deleted successfully!');
+                        }
+                      } catch (error) {
+                        setMessage('Error deleting assignment');
                       }
-                    } catch (error) {
-                      setMessage('Error deleting assignment');
-                    }
-                  }}>
-                    <Trash2 size={16} />
-                  </button>
-                </td>
-              </tr>
-            ))}
+                    }}>
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

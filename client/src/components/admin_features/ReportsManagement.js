@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Download, FileText, BarChart3, Users, GraduationCap, Award, Briefcase, TrendingUp, Calendar, Filter, RefreshCw } from 'lucide-react';
 import './styles/ReportsManagement.css';
+console.log('ReportsManagement.js file loaded');
 
 function ReportsManagement({ setCurrentView, setMessage }) {
+  console.log('ReportsManagement component loaded');
   const [activeReport, setActiveReport] = useState('overview');
   const [reportData, setReportData] = useState({});
   const [loading, setLoading] = useState(false);
@@ -64,7 +66,7 @@ function ReportsManagement({ setCurrentView, setMessage }) {
   };
 
   return (
-    <div className="reports-management">
+    <div className="reports-management" style={{minHeight: '100vh', background: '#f8fafc'}}>
       <div className="reports-header">
         <div className="header-left">
           <button className="back-btn" onClick={() => setCurrentView('main')}>

@@ -6,6 +6,23 @@ const { Pool } = require('pg');
 const puppeteer = require('puppeteer');
 const setupPortfolioRoutes = require('./portfolioRoutes');
 require('dotenv').config();
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
+
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+// Admin middleware
+const requireAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+
 
 const app = express();
 const PORT = 5000;
@@ -563,8 +580,20 @@ app.get('/api/admin/next-staff-number', authenticateToken, async (req, res) => {
   }
 });
 
+// Get staff CSV template
+app.get('/api/staff/template', authenticateToken, requireAdmin, (req, res) => {
+  const csvContent = 'name,email,department\n' +
+                    'John Teacher,john@email.com,CSE\n' +
+                    'Jane Professor,jane@email.com,IT\n' +
+                    'Mike Lecturer,mike@email.com,AIDS';
+  
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=staff_template.csv');
+  res.send(csvContent);
+});
+
 // Create staff account
-app.post('/api/admin/create-staff', authenticateToken, async (req, res) => {
+app.post('/api/admin/create-staff', authenticateToken, requireAdmin, async (req, res) => {
   const { name, email, staff_id, password, department } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -656,12 +685,47 @@ app.post('/api/subjects', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/subjects/:id', authenticateToken, async (req, res) => {
+// Delete all subjects (must come before /:id route)
+app.delete('/api/subjects/delete-all', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    console.log('Delete all subjects request received');
+    
+    // Check if subjects table exists
+    const tableCheck = await db.query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'subjects')");
+    if (!tableCheck.rows[0].exists) {
+      return res.json({ message: 'No subjects table found - 0 subjects deleted' });
+    }
+    
+    const result = await db.query('DELETE FROM subjects');
+    console.log(`Deleted ${result.rowCount} subjects`);
+    res.json({ message: `Deleted ${result.rowCount} subjects successfully` });
+  } catch (error) {
+    console.error('Delete all subjects error:', error);
+    res.status(500).json({ error: 'Database error: ' + error.message });
+  }
+});
+
+app.delete('/api/subjects/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    console.log('Delete subject request for ID:', req.params.id);
+    
+    // Check if subjects table exists
+    const tableCheck = await db.query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'subjects')");
+    if (!tableCheck.rows[0].exists) {
+      return res.status(404).json({ error: 'Subjects table not found' });
+    }
+    
     const result = await db.query('DELETE FROM subjects WHERE id = $1', [req.params.id]);
+    
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Subject not found' });
+    }
+    
+    console.log('Subject deleted successfully, ID:', req.params.id);
     res.json({ message: 'Subject deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Database error' });
+    console.error('Delete subject error:', error);
+    res.status(500).json({ error: 'Database error: ' + error.message });
   }
 });
 
@@ -1708,6 +1772,138 @@ app.post('/api/generate-resume-pdf', authenticateToken, async (req, res) => {
     console.error('Resume PDF generation error:', error);
     res.status(500).json({ error: 'PDF generation failed' });
   }
+});
+
+// Student CSV import endpoint  
+app.post('/api/admin/import-students', authenticateToken, requireAdmin, upload.single('csvFile'), async (req, res) => {
+  console.log('CSV import request received');
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No CSV file uploaded' });
+  }
+
+  const students = [];
+  
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      console.log('CSV row:', data);
+      const values = Object.values(data);
+      students.push({
+        name: values[0] || 'Student',
+        email: values[1] || null,
+        department: values[2] || 'IT',
+        year: values[3] || '25',
+        dob: values[4] || '010100'
+      });
+    })
+    .on('end', async () => {
+      console.log(`Processing ${students.length} students`);
+      
+      if (students.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'No valid students found' });
+      }
+
+      let imported = 0;
+      
+      for (const student of students) {
+        try {
+          const deptCode = student.department.toUpperCase().substring(0, 2);
+          const yearCode = student.year.toString().slice(-2);
+          
+          const countResult = await db.query(`SELECT COUNT(*) as count FROM users WHERE register_no LIKE $1`, [`STU${deptCode}${yearCode}%`]);
+          
+          const register_no = `STU${deptCode}${yearCode}${(parseInt(countResult.rows[0].count) + 1).toString().padStart(2, '0')}`;
+          const password = student.dob.toString().padStart(6, '0');
+          const hashedPassword = await bcrypt.hash(password, 10);
+          const joiningYear = 2000 + parseInt(student.year);
+          
+          console.log(`Creating student: ${register_no}`);
+          
+          await db.query('INSERT INTO users (register_no, name, email, password, role, department, joining_year) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [register_no, student.name, student.email, hashedPassword, 'student', student.department, joiningYear]
+          );
+          imported++;
+        } catch (error) {
+          console.error('Error importing student:', error);
+        }
+      }
+      
+      fs.unlinkSync(req.file.path);
+      console.log(`Import completed: ${imported} students`);
+      res.json({ message: `${imported} students imported successfully` });
+    })
+    .on('error', (error) => {
+      console.error('CSV processing error:', error);
+      fs.unlinkSync(req.file.path);
+      res.status(500).json({ error: 'CSV processing failed' });
+    });
+});
+
+// Staff CSV import endpoint
+app.post('/api/staff/import', authenticateToken, requireAdmin, upload.single('csvFile'), async (req, res) => {
+  console.log('Staff CSV import request received');
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No CSV file uploaded' });
+  }
+
+  const staff = [];
+  
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => {
+      console.log('Staff CSV row:', data);
+      const values = Object.values(data);
+      staff.push({
+        name: values[0] || 'Staff',
+        email: values[1] || null,
+        department: values[2] || 'IT'
+      });
+    })
+    .on('end', async () => {
+      console.log(`Processing ${staff.length} staff members`);
+      
+      if (staff.length === 0) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: 'No valid staff found' });
+      }
+
+      let imported = 0;
+      
+      for (const member of staff) {
+        try {
+          const deptCode = member.department.toUpperCase().substring(0, 3);
+          
+          const countResult = await db.query(`SELECT COUNT(*) as count FROM users WHERE staff_id LIKE $1`, [`STF${deptCode}%`]);
+          
+          const staff_id = `STF${deptCode}${(parseInt(countResult.rows[0].count) + 1).toString().padStart(3, '0')}`;
+          const name = member.name.toLowerCase().replace(/\s+/g, '');
+          const dept = member.department.toLowerCase();
+          const password = `${name}@${dept}`;
+          const hashedPassword = await bcrypt.hash(password, 10);
+          
+          console.log(`Creating staff: ${staff_id}`);
+          
+          await db.query('INSERT INTO users (staff_id, name, email, password, role, department) VALUES ($1, $2, $3, $4, $5, $6)',
+            [staff_id, member.name, member.email, hashedPassword, 'staff', member.department]
+          );
+          imported++;
+        } catch (error) {
+          console.error('Error importing staff:', error);
+        }
+      }
+      
+      fs.unlinkSync(req.file.path);
+      console.log(`Staff import completed: ${imported} staff members`);
+      res.json({ message: `${imported} staff imported successfully` });
+    })
+    .on('error', (error) => {
+      console.error('Staff CSV processing error:', error);
+      fs.unlinkSync(req.file.path);
+      res.status(500).json({ error: 'CSV processing failed' });
+    });
 });
 
 // Setup portfolio routes

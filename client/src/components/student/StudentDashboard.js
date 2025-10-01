@@ -21,6 +21,7 @@ import AcademicSection from './AcademicSection';
 import AttendanceSection from './AttendanceSection';
 import CertificatesSection from './CertificatesSection';
 import PortfolioSection from './PortfolioSection';
+import ResumeBuilder from './ResumeBuilder';
 import ChatbotSection from './ChatbotSection';
 import './ChatbotSection.css';
 
@@ -87,6 +88,12 @@ function StudentDashboard({ user, logout }) {
             >
               <User size={20} /> Portfolio
             </button>
+            <button 
+              className={`nav-item ${currentView === 'resume' ? 'active' : ''}`}
+              onClick={() => setCurrentView('resume')}
+            >
+              <Upload size={20} /> Resume Builder
+            </button>
           </nav>
         </aside>
 
@@ -96,6 +103,7 @@ function StudentDashboard({ user, logout }) {
           {currentView === 'attendance' && <AttendanceSection user={user} />}
           {currentView === 'certificates' && <CertificatesSection user={user} />}
           {currentView === 'portfolio' && <PortfolioSection user={user} />}
+          {currentView === 'resume' && <ResumeBuilder user={user} />}
         </main>
       </div>
       

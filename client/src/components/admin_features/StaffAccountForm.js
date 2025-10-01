@@ -1,23 +1,17 @@
-import React, { useState } from 'react';
-import { ArrowLeft, BookOpen, RefreshCw, Trash2, Upload, Users, FileSpreadsheet, Download, Sparkles } from 'lucide-react';
-import './styles/StudentAccountForm.css';
-import './styles/FloatingForms.css';
-
-function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
+import React, { useState, useEffect } from 'react';
+import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar, Filter, Hash, Building2 } from 'lucide-react';
+import './styles/StaffAccountForm.css';
+function CreateStaffForm({ setCurrentView, setMessage }) {
   const [step, setStep] = useState(1);
   const [showImport, setShowImport] = useState(false);
   const [csvFile, setCsvFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
   const [batchData, setBatchData] = useState({
-    department: '',
-    year: ''
+    department: ''
   });
-  const [studentRows, setStudentRows] = useState([{
+  const [staffRows, setStaffRows] = useState([{
     name: '',
     email: '',
-    day: '',
-    month: '',
-    dobYear: '',
     generatedId: '',
     generatedPassword: ''
   }]);
@@ -34,7 +28,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
     formData.append('csvFile', csvFile);
 
     try {
-      const response = await fetch('http://localhost:5000/api/students/import', {
+      const response = await fetch('http://localhost:5000/api/staff/import', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -45,7 +39,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
       const result = await response.json();
       
       if (response.ok) {
-        setAutoHideMessage(`✅ ${result.message}`);
+        setMessage(`✅ ${result.message}`);
         setCsvFile(null);
         setShowImport(false);
       } else {
@@ -63,66 +57,63 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
     setStep(2);
   };
 
-  const addStudentRow = () => {
-    setStudentRows([...studentRows, {
+  const addStaffRow = () => {
+    setStaffRows([...staffRows, {
       name: '',
       email: '',
-      day: '',
-      month: '',
-      dobYear: '',
       generatedId: '',
       generatedPassword: ''
     }]);
   };
 
-  const removeStudentRow = (index) => {
-    setStudentRows(studentRows.filter((_, i) => i !== index));
+  const removeStaffRow = (index) => {
+    setStaffRows(staffRows.filter((_, i) => i !== index));
   };
 
-  const updateStudentRow = (index, field, value) => {
-    const updated = studentRows.map((row, i) => {
+  const updateStaffRow = (index, field, value) => {
+    const updated = staffRows.map((row, i) => {
       if (i === index) {
         const newRow = { ...row, [field]: value };
         
         // Auto-generate ID when name is entered
         if (field === 'name' && value && !newRow.generatedId) {
-          generateStudentId(index);
+          generateStaffId(index);
         }
         
-        // Auto-generate password when DOB is complete
-        if (['day', 'month', 'dobYear'].includes(field) && newRow.day && newRow.month && newRow.dobYear) {
-          const password = `${newRow.day}${newRow.month}${newRow.dobYear.toString().slice(-2)}`;
-          newRow.generatedPassword = password;
+        // Auto-generate password when name is entered
+        if (field === 'name' && value) {
+          const name = value.toLowerCase().replace(/\s+/g, '');
+          const dept = batchData.department.toLowerCase();
+          newRow.generatedPassword = `${name}@${dept}`;
         }
         
         return newRow;
       }
       return row;
     });
-    setStudentRows(updated);
+    setStaffRows(updated);
   };
 
-  const generateStudentId = async (index) => {
+  const generateStaffId = async (index) => {
     try {
-      const deptCode = batchData.department.toUpperCase().substring(0, 2);
-      const yearCode = batchData.year.toString().slice(-2);
+      const deptCode = batchData.department.toUpperCase().substring(0, 3);
       
-      const response = await fetch(`http://localhost:5000/api/admin/next-student-number?dept=${deptCode}&year=${yearCode}`, {
+      const response = await fetch(`http://localhost:5000/api/admin/next-staff-number?dept=${deptCode}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       
       if (response.ok) {
         const data = await response.json();
-        const numStr = (data.nextNumber + index).toString().padStart(2, '0');
-        const id = `STU${deptCode}${yearCode}${numStr}`;
+        const numStr = (data.nextNumber + index).toString().padStart(3, '0');
+        const id = `STF${deptCode}${numStr}`;
         
-        const updated = studentRows.map((row, i) => 
+        const updated = staffRows.map((row, i) => 
           i === index ? { ...row, generatedId: id } : row
         );
-        setStudentRows(updated);
+        setStaffRows(updated);
       }
     } catch (error) {
-      console.error('Failed to generate student ID');
+      console.error('Failed to generate staff ID');
     }
   };
   
@@ -132,9 +123,9 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
     setMessage('');
     
     try {
-      const validRows = studentRows.filter(row => row.name && row.day && row.month && row.dobYear);
+      const validRows = staffRows.filter(row => row.name);
       const promises = validRows.map(row => 
-        fetch('http://localhost:5000/api/admin/create-student', {
+        fetch('http://localhost:5000/api/admin/create-staff', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -143,22 +134,18 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
           body: JSON.stringify({
             name: row.name,
             email: row.email,
-            day: row.day,
-            month: row.month,
-            dobYear: row.dobYear,
-            register_no: row.generatedId,
+            staff_id: row.generatedId,
             password: row.generatedPassword,
-            department: batchData.department,
-            year: batchData.year
+            department: batchData.department
           })
         })
       );
       
       await Promise.all(promises);
-      setMessage(`${validRows.length} student accounts created successfully and auto-assigned to classes!`);
+      setMessage(`${validRows.length} staff accounts created successfully!`);
       setStep(1);
-      setBatchData({ department: '', year: '' });
-      setStudentRows([{ name: '', email: '', day: '', month: '', dobYear: '', generatedId: '', generatedPassword: '' }]);
+      setBatchData({ department: '' });
+      setStaffRows([{ name: '', email: '', generatedId: '', generatedPassword: '' }]);
     } catch (error) {
       setMessage('Network error. Please try again.');
     } finally {
@@ -167,126 +154,51 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
   };
   
   return (
-    <div className="floating-container">
+    <div className="form-container">
       <div className="form-header">
         <button className="back-btn" onClick={() => setCurrentView('main')}>
           <ArrowLeft size={16} />
         </button>
-        <h2>Create Student Account</h2>
-        <button className="floating-btn student-import-csv-btn" onClick={() => setShowImport(!showImport)}>
-          <FileSpreadsheet size={16} />
-          <span>Bulk Import</span>
-          <Sparkles size={12} className="sparkle-icon" />
+        <h2>Create Staff Account</h2>
+        <button className="import-btn" onClick={() => setShowImport(!showImport)}>
+          📁 Import CSV
         </button>
       </div>
       
       {showImport && (
-        <div className="floating-section student-import-section">
-          <div className="floating-section-header">
-            <div className="floating-icon student-import-icon">
-              <Users size={20} />
+        <div className="csv-import-section">
+          <div className="import-header">
+            <h3>Import Staff from CSV</h3>
+            <button className="close-btn" onClick={() => setShowImport(false)}>×</button>
+          </div>
+          
+          <div className="import-actions">
+            <div className="file-upload">
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={(e) => setCsvFile(e.target.files[0])}
+                id="csvStaffFile"
+              />
+              <label htmlFor="csvStaffFile" className="file-label">
+                {csvFile ? csvFile.name : 'Choose CSV File'}
+              </label>
             </div>
-            <h3>Bulk Student Import</h3>
-            <button className="floating-btn floating-btn-secondary" onClick={() => setShowImport(false)} style={{ padding: '0.5rem', borderRadius: '50%', minWidth: 'auto' }}>
-              ×
+            
+            <button 
+              className="upload-btn" 
+              onClick={handleCsvImport}
+              disabled={!csvFile || isImporting}
+            >
+              {isImporting ? 'Importing...' : '📤 Import'}
             </button>
           </div>
           
-          <div className="student-import-content">
-            <div className="import-steps">
-              <div className="import-step">
-                <div className="step-number">1</div>
-                <div className="step-content">
-                  <h4>Download Template</h4>
-                  <p>Get the CSV template with correct format</p>
-                  <button className="floating-btn template-download-btn">
-                    <Download size={14} />
-                    Download Template
-                  </button>
-                </div>
-              </div>
-              
-              <div className="import-step">
-                <div className="step-number">2</div>
-                <div className="step-content">
-                  <h4>Upload Your File</h4>
-                  <p>Select your completed CSV file</p>
-                  <div className="file-upload-zone">
-                    <input 
-                      type="file" 
-                      accept=".csv" 
-                      onChange={(e) => setCsvFile(e.target.files[0])}
-                      id="csvStudentFile"
-                      className="file-input-hidden"
-                    />
-                    <label htmlFor="csvStudentFile" className="file-upload-label">
-                      <div className="upload-icon">
-                        <FileSpreadsheet size={24} />
-                      </div>
-                      <div className="upload-text">
-                        {csvFile ? (
-                          <>
-                            <span className="file-name">{csvFile.name}</span>
-                            <span className="file-size">{(csvFile.size / 1024).toFixed(1)} KB</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="upload-title">Drop CSV file here</span>
-                            <span className="upload-subtitle">or click to browse</span>
-                          </>
-                        )}
-                      </div>
-                    </label>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="import-step">
-                <div className="step-number">3</div>
-                <div className="step-content">
-                  <h4>Import Students</h4>
-                  <p>Process and create student accounts</p>
-                  <button 
-                    className="floating-btn student-process-btn"
-                    onClick={handleCsvImport}
-                    disabled={!csvFile || isImporting}
-                  >
-                    {isImporting ? (
-                      <>
-                        <RefreshCw size={14} className="spinning" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Upload size={14} />
-                        Import Students
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <div className="import-format-info">
-              <div className="format-header">
-                <FileSpreadsheet size={16} />
-                <span>CSV Format Requirements</span>
-              </div>
-              <div className="format-details">
-                <div className="format-row">
-                  <span className="format-label">Columns:</span>
-                  <span className="format-value">name, email, department, year, dob</span>
-                </div>
-                <div className="format-row">
-                  <span className="format-label">Example:</span>
-                  <span className="format-value">John Doe, john@email.com, CSE, 25, 150805</span>
-                </div>
-                <div className="format-row">
-                  <span className="format-label">Auto-Generated:</span>
-                  <span className="format-value">Register numbers & passwords</span>
-                </div>
-              </div>
-            </div>
+          
+          <div className="import-info">
+            <p><strong>CSV Format:</strong> name, email, department</p>
+            <p><strong>Example:</strong> John Teacher, john@email.com, CSE</p>
+            <p><strong>Note:</strong> Staff IDs and passwords will be auto-generated</p>
           </div>
         </div>
       )}
@@ -311,68 +223,24 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
             </select>
           </div>
           
-          <div className="form-group">
-            <label>Year of Joining (YY format) *</label>
-            <input
-              type="text"
-              value={batchData.year}
-              onChange={(e) => setBatchData({...batchData, year: e.target.value})}
-              placeholder="25"
-              maxLength="2"
-              required
-            />
-          </div>
-          
           <button type="submit" className="submit-btn">
-            Next: Add Students
+            Next: Add Staff
           </button>
         </form>
       ) : (
         <form onSubmit={handleFinalSubmit} className="admin-form">
-          <h3>Add Students for {batchData.department} - 20{batchData.year}</h3>
+          <h3>Add Staff for {batchData.department}</h3>
           
-          {studentRows.map((row, index) => (
-            <div key={index} className="student-row">
+          {staffRows.map((row, index) => (
+            <div key={index} className="staff-row">
               <div className="form-group">
                 <label>Full Name *</label>
                 <input
                   type="text"
                   value={row.name}
-                  onChange={(e) => updateStudentRow(index, 'name', e.target.value)}
+                  onChange={(e) => updateStaffRow(index, 'name', e.target.value)}
                   required
                 />
-              </div>
-              
-              <div className="form-group">
-                <label>Date of Birth (DD/MM/YY) *</label>
-                <div className="dob-inputs">
-                  <input
-                    type="text"
-                    value={row.day}
-                    onChange={(e) => updateStudentRow(index, 'day', e.target.value)}
-                    placeholder="DD"
-                    maxLength="2"
-                    required
-                  />
-                  <span>/</span>
-                  <input
-                    type="text"
-                    value={row.month}
-                    onChange={(e) => updateStudentRow(index, 'month', e.target.value)}
-                    placeholder="MM"
-                    maxLength="2"
-                    required
-                  />
-                  <span>/</span>
-                  <input
-                    type="text"
-                    value={row.dobYear}
-                    onChange={(e) => updateStudentRow(index, 'dobYear', e.target.value)}
-                    placeholder="YY"
-                    maxLength="2"
-                    required
-                  />
-                </div>
               </div>
               
               <div className="form-group">
@@ -380,7 +248,7 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
                 <input
                   type="email"
                   value={row.email}
-                  onChange={(e) => updateStudentRow(index, 'email', e.target.value)}
+                  onChange={(e) => updateStaffRow(index, 'email', e.target.value)}
                 />
               </div>
               
@@ -398,29 +266,22 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
                 </div>
               )}
               
-              {studentRows.length > 1 && (
-                <button type="button" className="remove-row-btn" onClick={() => removeStudentRow(index)}>
+              {staffRows.length > 1 && (
+                <button type="button" className="remove-row-btn" onClick={() => removeStaffRow(index)}>
                   <Trash2 size={16} />
                 </button>
               )}
             </div>
           ))}
           
-          <button type="button" className="add-row-btn" onClick={addStudentRow}>
-            + Add Another Student
+          <button type="button" className="add-row-btn" onClick={addStaffRow}>
+            + Add Another Staff
           </button>
           
           <div className="form-actions">
             <button type="button" className="cancel-btn" onClick={() => setStep(1)}>Back</button>
-            <button type="submit" className={`submit-btn ${isLoading ? 'loading' : ''}`} disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <div className="spinner"></div>
-                  Creating...
-                </>
-              ) : (
-                'Create All Students'
-              )}
+            <button type="submit" className="submit-btn" disabled={isLoading}>
+              {isLoading ? 'Creating...' : 'Create All Staff'}
             </button>
           </div>
         </form>
@@ -428,5 +289,4 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
     </div>
   );
 }
-
-export default CreateStudentForm;
+export default CreateStaffForm;
