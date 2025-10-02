@@ -13,6 +13,7 @@ const initStudentResultsRoutes = (db) => {
   router.post('/import', authenticateToken, requireAdmin, upload.single('csvFile'), (req, res) => studentResultsController.importResults(req, res));
   router.get('/template', authenticateToken, (req, res) => studentResultsController.getTemplate(req, res));
   router.post('/calculate-all-gpa', authenticateToken, requireAdmin, (req, res) => studentResultsController.calculateAllGPA(req, res));
+  router.get('/:registerNo', authenticateToken, (req, res) => studentResultsController.getStudentResults(req, res));
   
   return router;
 };

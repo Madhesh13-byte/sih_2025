@@ -6,6 +6,7 @@ const initSubjectRoutes = require('./subjects');
 const initClassRoutes = require('./classes');
 const initStaffRoutes = require('./staff');
 const initStudentResultsRoutes = require('./studentResults');
+const initStudentRoutes = require('./student');
 const initCCRoutes = require('./cc');
 const initPortfolioRoutes = require('./portfolio');
 
@@ -19,6 +20,7 @@ const initRoutes = (db) => {
   router.use('/classes', initClassRoutes(db));
   router.use('/staff', initStaffRoutes(db));
   router.use('/student-results', initStudentResultsRoutes(db));
+  router.use('/student', initStudentRoutes(db));
   router.use('/cc-assignments', initCCRoutes(db));
   router.use('/', initPortfolioRoutes(db));
   

@@ -195,6 +195,34 @@ class StudentResultsController {
       res.status(500).json({ error: 'GPA calculation failed: ' + error.message });
     }
   }
+
+  async getStudentResults(req, res) {
+    try {
+      const registerNo = req.params.registerNo;
+      const semester = req.query.semester;
+      
+      let query = `
+        SELECT sr.*, s.subject_name 
+        FROM student_results sr
+        LEFT JOIN subjects s ON sr.subject_code = s.subject_code
+        WHERE sr.register_no = $1
+      `;
+      const params = [registerNo];
+      
+      if (semester) {
+        query += ' AND sr.semester = $2';
+        params.push(parseInt(semester));
+      }
+      
+      query += ' ORDER BY sr.semester, sr.subject_code';
+      
+      const result = await this.db.query(query, params);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching student results:', error);
+      res.status(500).json({ error: 'Failed to fetch student results' });
+    }
+  }
 }
 
 module.exports = StudentResultsController;
