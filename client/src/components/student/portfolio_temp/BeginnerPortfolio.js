@@ -39,7 +39,7 @@ const BeginnerPortfolio = ({ user, isModal = false, onDownload }) => {
       if (qrData) return; // Prevent duplicate calls
       try {
         console.log('🔄 Generating QR code for Beginner portfolio...');
-        const response = await fetch('/api/generate-portfolio', {
+        const response = await fetch('http://localhost:5000/api/generate-portfolio', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -71,7 +71,7 @@ const BeginnerPortfolio = ({ user, isModal = false, onDownload }) => {
       console.log('🚀 Starting PDF generation for Beginner Portfolio...');
       console.log('📊 Portfolio data:', { name: studentData.name, certificates: certificates.length, level: studentData.level });
       
-      const response = await fetch('/api/generate-beginner-portfolio-pdf', {
+      const response = await fetch('http://localhost:5000/api/generate-beginner-portfolio-pdf', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

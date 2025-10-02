@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const puppeteer = require('puppeteer');
-const setupPortfolioRoutes = require('./portfolioRoutes');
 require('dotenv').config();
 
 const db = require('./config/database');
@@ -103,8 +102,7 @@ app.use(express.json());
 // Initialize routes with database connection
 app.use('/api', initRoutes(db));
 
-// Setup portfolio routes
-setupPortfolioRoutes(app, require('./middleware/auth').authenticateToken, db);
+// Portfolio routes now handled in MVC structure
 
 app.listen(PORT, () => {
   console.log(`✅ MVC Server running on port ${PORT}`);
