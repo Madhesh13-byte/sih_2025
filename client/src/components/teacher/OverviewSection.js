@@ -2,10 +2,15 @@ import React from 'react';
 import { BookOpen, Users, Calendar } from 'lucide-react';
 import RealTimeScheduleNotification from './RealTimeScheduleNotification';
 
-function OverviewSection({ user, assignments }) {
+function OverviewSection({ user, assignments, currentSemester }) {
   return (
     <div className="overview-section">
       <h2>Welcome back, {user?.name}!</h2>
+      {currentSemester && (
+        <div style={{ marginBottom: '1rem', padding: '0.5rem 1rem', background: '#e3f2fd', borderRadius: '8px', display: 'inline-block' }}>
+          <strong>Viewing: Semester {currentSemester}</strong>
+        </div>
+      )}
       
       <RealTimeScheduleNotification user={user} />
       

@@ -7,8 +7,11 @@ const initClassRoutes = require('./classes');
 const initStaffRoutes = require('./staff');
 const initStudentResultsRoutes = require('./studentResults');
 const initStudentRoutes = require('./student');
+const initTeacherRoutes = require('./teacher');
+const initTimetableRoutes = require('./timetable');
 const initCCRoutes = require('./cc');
 const initPortfolioRoutes = require('./portfolio');
+const initCalendarRoutes = require('./calendar');
 
 const initRoutes = (db) => {
   const router = express.Router();
@@ -21,8 +24,11 @@ const initRoutes = (db) => {
   router.use('/staff', initStaffRoutes(db));
   router.use('/student-results', initStudentResultsRoutes(db));
   router.use('/student', initStudentRoutes(db));
+  router.use('/teacher', initTeacherRoutes(db));
+  router.use('/timetable', initTimetableRoutes(db));
   router.use('/cc-assignments', initCCRoutes(db));
   router.use('/', initPortfolioRoutes(db));
+  router.use('/calendar', initCalendarRoutes(db));
   
   return router;
 };

@@ -22,6 +22,7 @@ import AssignmentsSection from './AssignmentsSection';
 import GradesSection from './GradesSection';
 import AttendanceSection from './AttendanceSection';
 import CertificatesSection from './CertificatesSection';
+import TimetableSection from './TimetableSection';
 import RealTimeScheduleNotification from './RealTimeScheduleNotification';
 import TimetableNotification from './TimetableNotification';
 import './TeacherDashboard.css';
@@ -31,6 +32,7 @@ function TeacherDashboard({ user, logout }) {
   const [assignments, setAssignments] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [isCC, setIsCC] = useState(false);
+  const [currentSemester, setCurrentSemester] = useState(null);
   
   useEffect(() => {
     fetchStaffAssignments();
@@ -53,18 +55,16 @@ function TeacherDashboard({ user, logout }) {
   };
   
   const fetchStaffAssignments = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/staff-assignments', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const myAssignments = data.filter(assignment => assignment.staff_id === user?.staff_id);
-        setAssignments(myAssignments);
-      }
-    } catch (error) {
-      console.error('Failed to fetch assignments:', error);
-    }
+    // Force dummy data for testing toggle functionality
+    const dummyAssignments = [
+      { id: 1, subject_code: 'CS101', subject_name: 'Data Structures', department: 'CSE', year: 2, semester: 1 },
+      { id: 2, subject_code: 'CS201', subject_name: 'Algorithms', department: 'CSE', year: 2, semester: 2 },
+      { id: 3, subject_code: 'MA101', subject_name: 'Mathematics', department: 'CSE', year: 1, semester: 1 },
+      { id: 4, subject_code: 'PH201', subject_name: 'Physics', department: 'CSE', year: 1, semester: 2 },
+      { id: 5, subject_code: 'CS301', subject_name: 'Database Systems', department: 'IT', year: 3, semester: 3 }
+    ];
+    setAssignments(dummyAssignments);
+    setCurrentSemester(1);
   };
 
   return (
@@ -90,6 +90,21 @@ function TeacherDashboard({ user, logout }) {
             <h3>{user?.name}</h3>
             <p>{user?.staff_id}</p>
             <p>{user?.department}</p>
+            
+            <div className="semester-toggles">
+              <label>Semester:</label>
+              <div className="toggle-buttons">
+                {[...new Set(assignments.map(a => a.semester))].sort().map(sem => (
+                  <button 
+                    key={sem}
+                    className={`semester-btn ${currentSemester === sem ? 'active' : ''}`}
+                    onClick={() => setCurrentSemester(sem)}
+                  >
+                    Sem {sem}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <nav className="sidebar-nav">
@@ -99,7 +114,12 @@ function TeacherDashboard({ user, logout }) {
             >
               <Home size={20} /> Overview
             </button>
-
+            <button 
+              className={`nav-item ${currentView === 'timetable' ? 'active' : ''}`}
+              onClick={() => setCurrentView('timetable')}
+            >
+              <Clock size={20} /> My Timetable
+            </button>
             <button 
               className={`nav-item ${currentView === 'assignments' ? 'active' : ''}`}
               onClick={() => setCurrentView('assignments')}
@@ -137,11 +157,12 @@ function TeacherDashboard({ user, logout }) {
 
         <main className="teacher-main">
           <TimetableNotification user={user} />
-          {currentView === 'overview' && <OverviewSection user={user} assignments={assignments} />}
+          {currentView === 'overview' && <OverviewSection user={user} assignments={assignments.filter(a => !currentSemester || a.semester === currentSemester)} currentSemester={currentSemester} />}
 
-          {currentView === 'assignments' && <AssignmentsSection assignments={assignments} />}
-          {currentView === 'grades' && <GradesSection assignments={assignments} />}
-          {currentView === 'attendance' && <AttendanceSection assignments={assignments} />}
+          {currentView === 'assignments' && <AssignmentsSection assignments={assignments.filter(a => !currentSemester || a.semester === currentSemester)} />}
+          {currentView === 'grades' && <GradesSection assignments={assignments.filter(a => !currentSemester || a.semester === currentSemester)} />}
+          {currentView === 'attendance' && <AttendanceSection assignments={assignments.filter(a => !currentSemester || a.semester === currentSemester)} />}
+          {currentView === 'timetable' && <TimetableSection user={user} currentSemester={currentSemester} />}
           {currentView === 'certificates' && isCC && <CertificatesSection user={user} />}
           {currentView === 'portfolio' && <OfficialPortfolio user={user} />}
         </main>

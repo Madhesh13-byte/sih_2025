@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar, Filter, Hash, Building2 } from 'lucide-react';
+import { GraduationCap, Users, Eye, ArrowLeft, RefreshCw, Trash2, BookOpen, UserCheck, BarChart3, Settings, Calendar as CalendarIcon, Filter, Hash, Building2 } from 'lucide-react';
 import './styles/AdminDashboard.css';
 import './styles/SubjectFilters.css';
 import './styles/FloatingForms.css';
@@ -15,6 +15,7 @@ import SubjectManagement from './SubjectManagement';
 import StaffAssignments from './StaffAssignments';
 import StudentResultsManagement from './StudentResultsManagement';
 import ReportsManagement from './ReportsManagement';
+import CalendarComponent from './Calendar';
 
 function AdminDashboard({ user, logout }) {
   const [currentView, setCurrentView] = useState('main');
@@ -160,6 +161,10 @@ function AdminDashboard({ user, logout }) {
             <ReportsManagement setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
           </div>
         )}
+        
+        {currentView === 'calendar' && (
+          <CalendarComponent setCurrentView={setCurrentView} setMessage={setAutoHideMessage} />
+        )}
       </div>
     </div>
   );
@@ -222,7 +227,7 @@ function MainAdminView({ setCurrentView }) {
               <span>Classes</span>
             </button>
             <button className="action-card timetable-card" onClick={() => setCurrentView('timetables')}>
-              <Calendar size={20} />
+              <CalendarIcon size={20} />
               <span>Timetables</span>
             </button>
             <button className="action-card results-card" onClick={() => setCurrentView('student-results')}>
@@ -232,6 +237,10 @@ function MainAdminView({ setCurrentView }) {
             <button className="action-card reports-card" onClick={() => setCurrentView('reports')}>
               <BarChart3 size={20} />
               <span>Reports</span>
+            </button>
+            <button className="action-card calendar-card" onClick={() => setCurrentView('calendar')}>
+              <CalendarIcon size={20} />
+              <span>Academic Calendar</span>
             </button>
           </div>
         </div>

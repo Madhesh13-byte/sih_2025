@@ -11,20 +11,26 @@ function GradesSection({ assignments }) {
   
   const fetchStudents = async (assignmentId) => {
     try {
-      const url = academicYear ? 
-        `http://localhost:5000/api/staff/students/${assignmentId}?academic_year=${academicYear}` :
-        `http://localhost:5000/api/staff/students/${assignmentId}`;
+      const assignment = assignments.find(a => a.id.toString() === assignmentId);
+      if (!assignment) return;
       
-      const response = await fetch(url, {
+      const params = new URLSearchParams({
+        subject_code: assignment.subject_code,
+        semester: assignment.semester,
+        department: assignment.department,
+        year: assignment.year
+      });
+      
+      const response = await fetch(`http://localhost:5000/api/teacher/students?${params}`, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
+      
       if (response.ok) {
         const data = await response.json();
-        setStudents(data.students.map(student => ({
+        setStudents(data.map(student => ({
           id: student.id,
           name: student.name,
           regNo: student.register_no,
-          section: student.section,
           marks: ''
         })));
       }
@@ -68,7 +74,7 @@ function GradesSection({ assignments }) {
     const maxMarks = getMaxMarks();
     
     try {
-      const response = await fetch('http://localhost:5000/api/staff/grades', {
+      const response = await fetch('http://localhost:5000/api/teacher/grades', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
