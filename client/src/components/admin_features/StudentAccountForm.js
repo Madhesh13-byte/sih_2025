@@ -142,19 +142,15 @@ function CreateStudentForm({ setCurrentView, setMessage, setAutoHideMessage }) {
           body: JSON.stringify({
             name: row.name,
             email: row.email,
-            day: row.day,
-            month: row.month,
-            dobYear: row.dobYear,
             register_no: row.generatedId,
             password: row.generatedPassword,
-            department: batchData.department,
-            year: batchData.year
+            department: batchData.department
           })
         })
       );
       
       await Promise.all(promises);
-      setMessage(`${validRows.length} student accounts created successfully and auto-assigned to classes!`);
+      setAutoHideMessage(`✅ ${validRows.length} student accounts created successfully!`);
       setStep(1);
       setBatchData({ department: '', year: '' });
       setStudentRows([{ name: '', email: '', day: '', month: '', dobYear: '', generatedId: '', generatedPassword: '' }]);

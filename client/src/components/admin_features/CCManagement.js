@@ -9,14 +9,19 @@ function CCManagement({ setCurrentView, setMessage }) {
     staffId: '', department: '', year: '', semester: ''
   });
 
-  const fetchStaffMembers = async () => {
+  const fetchStaffMembers = async (department) => {
+    if (!department) {
+      setStaffMembers([]);
+      return;
+    }
+    
     try {
       const response = await fetch('http://localhost:5000/api/admin/accounts', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       const data = await response.json();
       if (response.ok) {
-        const staff = data.filter(account => account.role === 'staff');
+        const staff = data.filter(account => account.role === 'staff' && account.department === department);
         setStaffMembers(staff.map(s => ({ id: s.staff_id, name: s.name, department: s.department })));
       }
     } catch (error) {
@@ -39,7 +44,6 @@ function CCManagement({ setCurrentView, setMessage }) {
   };
 
   useEffect(() => {
-    fetchStaffMembers();
     fetchCoordinators();
   }, []);
 
@@ -122,8 +126,9 @@ function CCManagement({ setCurrentView, setMessage }) {
                     value={formData.staffId}
                     onChange={(e) => setFormData({...formData, staffId: e.target.value})}
                     required
+                    disabled={!formData.department}
                   >
-                    <option value="">Staff</option>
+                    <option value="">{!formData.department ? 'Select Department First' : 'Select Staff'}</option>
                     {staffMembers.map(staff => (
                       <option key={staff.id} value={staff.id}>{staff.name}</option>
                     ))}
@@ -133,7 +138,11 @@ function CCManagement({ setCurrentView, setMessage }) {
                 <div className="select-group-modern">
                   <select
                     value={formData.department}
-                    onChange={(e) => setFormData({...formData, department: e.target.value})}
+                    onChange={(e) => {
+                      const dept = e.target.value;
+                      setFormData({...formData, department: dept, staffId: ''});
+                      fetchStaffMembers(dept);
+                    }}
                     required
                   >
                     <option value="">Department</option>
