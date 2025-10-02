@@ -1,24 +1,24 @@
-import logo from './logo.svg';
+import React from 'react';
+import { Toaster } from 'react-hot-toast';
+import { ResumeProvider } from './context/ResumeContext';
+import ResumeBuilderPage from './pages/ResumeBuilderPage';
 import './App.css';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <ResumeProvider>
+      <ResumeBuilderPage />
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+        }}
+      />
+    </ResumeProvider>
   );
 }
 
