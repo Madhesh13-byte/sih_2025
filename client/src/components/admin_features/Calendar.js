@@ -40,10 +40,10 @@ const Calendar = () => {
   };
 
   const dayTypes = {
-    working: { label: 'Working Day', color: '#10b981' },
-    holiday: { label: 'Holiday', color: '#ef4444' },
-    exam: { label: 'Exam Day', color: '#f59e0b' },
-    break: { label: 'Semester Break', color: '#8b5cf6' }
+    working: { label: 'Working Day', color: '#166534' },
+    holiday: { label: 'Holiday', color: '#991b1b' },
+    exam: { label: 'Exam Day', color: '#92400e' },
+    break: { label: 'Semester Break', color: '#6b21a8' }
   };
 
   const monthNames = ["January", "February", "March", "April", "May", "June",
@@ -64,17 +64,34 @@ const Calendar = () => {
     
     setWorkingDays(prev => ({
       ...prev,
-      [dateKey]: { type: selectedType, date }
+      [dateKey]: { type: selectedType, date, description: '' }
     }));
+    
+    fetch('/api/calendar/working-days', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        date: dateKey,
+        type: selectedType,
+        description: '',
+        academicYear: new Date().getFullYear().toString()
+      })
+    }).catch(error => console.error('Save failed:', error));
   };
-
-
 
   const getDayType = (day) => {
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
     const dateKey = date.toISOString().split('T')[0];
-    
     return workingDays[dateKey]?.type || null;
+  };
+
+  const isWeekend = (day) => {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    const dayOfWeek = date.getDay();
+    return dayOfWeek === 0 || dayOfWeek === 6;
   };
 
   const navigateMonth = (direction) => {
@@ -93,35 +110,6 @@ const Calendar = () => {
     setWorkingDays(prev => ({ ...prev, ...updates }));
   };
 
-  const saveToDatabase = async (updates) => {
-    try {
-      for (const dateKey of Object.keys(updates)) {
-        const { type, description } = updates[dateKey];
-        
-        const response = await fetch('/api/calendar/working-days', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          body: JSON.stringify({
-            date: dateKey,
-            type,
-            description,
-            academicYear: new Date().getFullYear().toString()
-          })
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Failed to save ${dateKey}`);
-        }
-      }
-    } catch (error) {
-      console.error('Database save error:', error);
-      alert('Data imported locally but failed to save to database');
-    }
-  };
-
   const clearMonth = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -132,83 +120,6 @@ const Calendar = () => {
       })
     );
     setWorkingDays(filtered);
-  };
-
-  const exportCalendar = () => {
-    const csvData = [];
-    csvData.push(['Date', 'Day', 'Type', 'Description']);
-    
-    const daysInMonth = getDaysInMonth(currentDate);
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-      const dateStr = date.toISOString().split('T')[0];
-      const dayName = dayNames[date.getDay()];
-      const type = getDayType(day) || 'working';
-      const description = workingDays[dateStr]?.description || '';
-      
-      csvData.push([dateStr, dayName, type, description]);
-    }
-    
-    const csvContent = csvData.map(row => row.join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `calendar-${currentDate.getFullYear()}-${currentDate.getMonth() + 1}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importCSV = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const csv = e.target.result;
-        console.log('CSV Content:', csv);
-        
-        const lines = csv.split('\n').filter(line => line.trim());
-        console.log('Lines:', lines);
-        
-        const updates = {};
-        
-        // Skip header row
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          const columns = line.split(',');
-          console.log('Columns:', columns);
-          
-          const dateStr = columns[0]?.trim();
-          const type = columns[2]?.trim().toLowerCase();
-          const description = columns[3]?.trim() || '';
-          
-          console.log('Processing:', { dateStr, type, description });
-          
-          if (dateStr && type && ['working', 'holiday', 'exam', 'break'].includes(type)) {
-            updates[dateStr] = { type, date: new Date(dateStr), description };
-          } else {
-            console.log('Skipped invalid row:', { dateStr, type });
-          }
-        }
-        
-        console.log('Final updates:', updates);
-        setWorkingDays(prev => ({ ...prev, ...updates }));
-        
-        // Save to database
-        saveToDatabase(updates);
-        alert(`Imported ${Object.keys(updates).length} calendar entries`);
-      } catch (error) {
-        console.error('Import error:', error);
-        alert('Error importing CSV: ' + error.message);
-      }
-    };
-    reader.readAsText(file);
-    
-    event.target.value = '';
   };
 
   const daysInMonth = getDaysInMonth(currentDate);
@@ -237,19 +148,6 @@ const Calendar = () => {
           <button onClick={() => setShowBulkSelect(!showBulkSelect)} className="bulk-btn">
             Bulk Select
           </button>
-          <label className="import-btn">
-            Import CSV
-            <input 
-              type="file" 
-              accept=".csv" 
-              onChange={importCSV} 
-              style={{display: 'none'}} 
-              key={Date.now()}
-            />
-          </label>
-          <button onClick={exportCalendar} className="export-btn">
-            Export CSV
-          </button>
           <button onClick={clearMonth} className="clear-btn">
             Clear Month
           </button>
@@ -265,11 +163,18 @@ const Calendar = () => {
 
         <div className="day-selector">
           <label>Mark as:</label>
-          <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)}>
-            {Object.entries(dayTypes).map(([key, type]) => (
-              <option key={key} value={key}>{type.label}</option>
-            ))}
+          <select 
+            value={selectedType} 
+            onChange={(e) => setSelectedType(e.target.value)}
+          >
+            <option value="working">Working Day</option>
+            <option value="holiday">Holiday</option>
+            <option value="exam">Exam Day</option>
+            <option value="break">Semester Break</option>
           </select>
+          <span style={{ marginLeft: '10px', fontWeight: 'bold', color: dayTypes[selectedType].color }}>
+            Selected: {dayTypes[selectedType].label}
+          </span>
         </div>
       </div>
 
@@ -292,15 +197,13 @@ const Calendar = () => {
         <div className="calendar-days">
           {days.map((day, index) => {
             const dayType = day ? getDayType(day) : null;
+            const weekend = day ? isWeekend(day) : false;
             return (
               <div
-                key={index}
-                className={`calendar-day ${day ? 'active' : 'empty'} ${dayType || ''}`}
+                key={`${day}-${dayType}-${index}`}
+                className={`calendar-day ${day ? 'active' : 'empty'} ${dayType || ''} ${weekend ? 'weekend' : ''}`}
                 onClick={() => day && handleDateClick(day)}
-                style={{
-                  color: day && dayType ? dayTypes[dayType].color : '#374151',
-                  fontWeight: day && dayType ? '700' : '500'
-                }}
+                title={day && dayType ? `${day} - ${dayTypes[dayType].label}` : day ? `${day} - Click to mark as ${dayTypes[selectedType].label}` : ''}
               >
                 {day}
               </div>

@@ -22,6 +22,7 @@ import AttendanceSection from './AttendanceSection';
 import CertificatesSection from './CertificatesSection';
 import PortfolioSection from './PortfolioSection';
 import ResumeBuilder from './ResumeBuilder';
+import TimetableSection from './TimetableSection';
 import ChatbotSection from './ChatbotSection';
 import './ChatbotSection.css';
 
@@ -77,6 +78,12 @@ function StudentDashboard({ user, logout }) {
               <Calendar size={20} /> Attendance
             </button>
             <button 
+              className={`nav-item ${currentView === 'timetable' ? 'active' : ''}`}
+              onClick={() => setCurrentView('timetable')}
+            >
+              <Clock size={20} /> Timetable
+            </button>
+            <button 
               className={`nav-item ${currentView === 'certificates' ? 'active' : ''}`}
               onClick={() => setCurrentView('certificates')}
             >
@@ -101,6 +108,7 @@ function StudentDashboard({ user, logout }) {
           {currentView === 'overview' && <OverviewSection user={user} />}
           {currentView === 'academic' && <AcademicSection user={user} />}
           {currentView === 'attendance' && <AttendanceSection user={user} />}
+          {currentView === 'timetable' && <TimetableSection user={user} />}
           {currentView === 'certificates' && <CertificatesSection user={user} />}
           {currentView === 'portfolio' && <PortfolioSection user={user} />}
           {currentView === 'resume' && <ResumeBuilder user={user} />}

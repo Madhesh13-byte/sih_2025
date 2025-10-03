@@ -111,6 +111,78 @@ const initTeacherRoutes = (db) => {
     }
   });
 
+  // Save marks (enhanced version)
+  router.post('/marks', authenticateToken, async (req, res) => {
+    try {
+      const { students, subject_code, subject_name, semester, mark_type, mark_category, max_marks, academic_year } = req.body;
+      const staff_id = req.user.staff_id;
+      
+      // Create enhanced marks table if not exists
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS student_marks (
+          id SERIAL PRIMARY KEY,
+          student_id INTEGER REFERENCES users(id),
+          subject_code VARCHAR(20),
+          subject_name VARCHAR(100),
+          semester INTEGER,
+          mark_type VARCHAR(50),
+          mark_category VARCHAR(50),
+          marks DECIMAL(5,2),
+          max_marks INTEGER,
+          staff_id VARCHAR(20),
+          academic_year VARCHAR(10),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(student_id, subject_code, semester, mark_type, mark_category, academic_year)
+        )
+      `);
+      
+      let saved = 0;
+      for (const student of students) {
+        await db.query(`
+          INSERT INTO student_marks (student_id, subject_code, subject_name, semester, mark_type, mark_category, marks, max_marks, staff_id, academic_year)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ON CONFLICT (student_id, subject_code, semester, mark_type, mark_category, academic_year)
+          DO UPDATE SET marks = $7, max_marks = $8, updated_at = CURRENT_TIMESTAMP
+        `, [student.id, subject_code, subject_name, semester, mark_type, mark_category, student.marks, max_marks, staff_id, academic_year]);
+        saved++;
+      }
+      
+      res.json({ message: `${saved} marks saved successfully`, saved_count: saved });
+    } catch (error) {
+      console.error('Error saving marks:', error);
+      res.status(500).json({ error: 'Failed to save marks' });
+    }
+  });
+
+  // Get marks for a subject
+  router.get('/marks', authenticateToken, async (req, res) => {
+    try {
+      const { subject_code, semester, mark_type, academic_year } = req.query;
+      const staff_id = req.user.staff_id;
+      
+      const query = `
+        SELECT sm.*, u.name as student_name, u.register_no
+        FROM student_marks sm
+        JOIN users u ON sm.student_id = u.id
+        WHERE sm.subject_code = $1 AND sm.semester = $2 AND sm.staff_id = $3
+        ${mark_type ? 'AND sm.mark_type = $4' : ''}
+        ${academic_year ? `AND sm.academic_year = $${mark_type ? 5 : 4}` : ''}
+        ORDER BY u.register_no
+      `;
+      
+      const params = [subject_code, semester, staff_id];
+      if (mark_type) params.push(mark_type);
+      if (academic_year) params.push(academic_year);
+      
+      const result = await db.query(query, params);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching marks:', error);
+      res.status(500).json({ error: 'Failed to fetch marks' });
+    }
+  });
+
   // Get teacher's timetable (redirect to timetable API)
   router.get('/timetable', authenticateToken, async (req, res) => {
     try {
