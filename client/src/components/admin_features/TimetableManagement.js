@@ -1,254 +1,704 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Check, X, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Clock, Plus, Trash2, Calendar, Save, Download } from 'lucide-react';
+import './styles/TimetableManagement.css';
 
-function TimetableManagement() {
-  const [teachers, setTeachers] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [batches, setBatches] = useState([]);
-  const [timeSlots, setTimeSlots] = useState([]);
-  const [conflicts, setConflicts] = useState([]);
+function TimetableManagement({ setCurrentView, setMessage }) {
+  const [timetables, setTimetables] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [formStep, setFormStep] = useState(1);
+  const [currentPeriod, setCurrentPeriod] = useState(1);
+  const [dayPeriods, setDayPeriods] = useState([]);
+  const [selectedSemester, setSelectedSemester] = useState({ department: '', year: '', semester: '', section: '' });
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const sections = ['A', 'B', 'C', 'D'];
   const [formData, setFormData] = useState({
-    staffId: '',
-    subjectCode: '',
-    batchId: '',
-    dayOfWeek: '',
-    timeSlotId: '',
-    roomNumber: '',
-    academicYear: new Date().getFullYear(),
-    semester: 1
+    day_of_week: '',
+    period_number: '',
+    start_time: '',
+    end_time: '',
+    subject_code: '',
+    staff_id: '',
+    room_number: ''
   });
 
+  const days = ['I', 'II', 'III', 'IV', 'V'];
+  const periods = [
+    { number: 1, start: '09:15', end: '10:05' },
+    { number: 2, start: '10:05', end: '10:55' },
+    { number: 3, start: '11:05', end: '11:55' },
+    { number: 4, start: '11:55', end: '12:45' },
+    { number: 5, start: '1:25', end: '2:10' },
+    { number: 6, start: '2:10', end: '3:05' },
+    { number: 7, start: '3:15', end: '4:00' },
+    { number: 8, start: '4:00', end: '4:45' }
+  ];
+
   useEffect(() => {
-    fetchData();
+    fetchStaffMembers();
+    fetchSubjects();
+    fetchAssignments();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const [teachersRes, subjectsRes, batchesRes, timeSlotsRes] = await Promise.all([
-        fetch('http://localhost:5000/api/admin/users?role=staff', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        }),
-        fetch('http://localhost:5000/api/subjects', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        }),
-        fetch('http://localhost:5000/api/classes', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        }),
-        fetch('http://localhost:5000/api/timetable/time-slots', {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        })
-      ]);
+  // Refetch assignments when semester details change
+  useEffect(() => {
+    if (selectedSemester.department && selectedSemester.year && selectedSemester.semester) {
+      fetchAssignments();
+    }
+  }, [selectedSemester.department, selectedSemester.year, selectedSemester.semester]);
 
-      if (teachersRes.ok) setTeachers(await teachersRes.json());
-      if (subjectsRes.ok) setSubjects(await subjectsRes.json());
-      if (batchesRes.ok) setBatches(await batchesRes.json());
-      if (timeSlotsRes.ok) setTimeSlots(await timeSlotsRes.json());
+  useEffect(() => {
+    if (selectedSemester.department && selectedSemester.year && selectedSemester.semester) {
+      fetchTimetables();
+    }
+  }, [selectedSemester]);
+
+  const fetchStaffMembers = async () => {
+    try {
+      const response = await fetch('/api/admin/accounts', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStaffMembers(data.filter(account => account.role === 'staff'));
+      }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      console.error('Failed to fetch staff:', error);
+      setMessage('Failed to fetch staff members');
     }
   };
 
-  const checkConflicts = async () => {
+  const fetchSubjects = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/timetable/check-conflicts', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
+      const response = await fetch('/api/subjects', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-
       if (response.ok) {
         const data = await response.json();
-        setConflicts(data.conflicts);
-        return !data.hasConflicts;
+        setSubjects(data.map(s => ({ code: s.subject_code, name: s.subject_name, department: s.department, year: s.year, semester: s.semester })));
       }
     } catch (error) {
-      console.error('Failed to check conflicts:', error);
+      console.error('Failed to fetch subjects:', error);
+      setMessage('Failed to fetch subjects');
     }
-    return false;
+  };
+
+  const fetchAssignments = async () => {
+    try {
+      const { department, year, semester } = selectedSemester;
+      const queryParams = new URLSearchParams({
+        department,
+        year,
+        semester
+      }).toString();
+
+      const response = await fetch(`/api/staff-assignments?${queryParams}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAssignments(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch assignments:', error);
+    }
+  };
+
+  const fetchTimetables = async () => {
+    try {
+      const { department, year, semester, section } = selectedSemester;
+      const yearToNumeric = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+      const numericYear = yearToNumeric[year] || year;
+      const response = await fetch(`/api/timetables?department=${department}&year=${numericYear}&semester=${semester}&section=${section}&_t=${Date.now()}`, {
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTimetables(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch timetables:', error);
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const noConflicts = await checkConflicts();
-    if (!noConflicts && conflicts.length > 0) {
-      alert('Conflicts detected! Please resolve them before creating the entry.');
+    const selectedAssignment = assignments.find(a => a.subject_code === formData.subject_code);
+    
+    if (!selectedAssignment) {
+      setMessage('Please select a subject');
       return;
     }
 
+    // Convert Roman year to numeric
+    const yearToNumeric = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+    const numericYear = yearToNumeric[selectedSemester.year] || selectedSemester.year;
+    
+    // Add current period to the list
+    const newPeriod = {
+      department: selectedSemester.department,
+      year: numericYear,
+      semester: selectedSemester.semester,
+      section: selectedSemester.section,
+      day_of_week: formData.day_of_week,
+      period_number: currentPeriod,
+      start_time: periods[currentPeriod-1]?.start || '',
+      end_time: periods[currentPeriod-1]?.end || '',
+      subject_code: formData.subject_code,
+      subject_name: selectedAssignment.subject_name,
+      staff_id: selectedAssignment.staff_id,
+      staff_name: selectedAssignment.staff_name,
+      room_number: formData.room_number
+    };
+    
+    setDayPeriods([...dayPeriods, newPeriod]);
+    
+    // Move to next period
+    if (currentPeriod < 8) {
+      setCurrentPeriod(currentPeriod + 1);
+      setFormData({
+        ...formData,
+        period_number: (currentPeriod + 1).toString(),
+        start_time: periods[currentPeriod]?.start || '',
+        end_time: periods[currentPeriod]?.end || '',
+        subject_code: '',
+        staff_id: '',
+        room_number: ''
+      });
+    } else {
+      // Save all periods to database
+      await saveAllPeriods([...dayPeriods, newPeriod]);
+    }
+  };
+  
+  const saveAllPeriods = async (periods) => {
     try {
-      const response = await fetch('http://localhost:5000/api/timetable/entries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
+      const promises = periods.map(period => {
+        console.log('Saving period:', period);
+        return fetch('/api/timetables', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(period)
+        });
+      });
+      
+      const responses = await Promise.all(promises);
+      const results = await Promise.all(responses.map(r => r.json()));
+      console.log('Save results:', results);
+      
+      fetchTimetables();
+      resetForm();
+      setMessage(`${periods.length} periods added successfully!`);
+    } catch (error) {
+      console.error('Error saving periods:', error);
+      setMessage('Error saving periods');
+    }
+  };
+  
+  const exportTimetable = () => {
+    const csvData = [];
+    csvData.push(['Day', 'Period', 'Time', 'Subject Code', 'Subject Name', 'Staff', 'Room']);
+    
+    days.forEach((day, dayIndex) => {
+      periods.forEach(period => {
+        const entry = grid[dayIndex][period.number];
+        if (entry) {
+          csvData.push([
+            day,
+            `P${period.number}`,
+            `${period.start}-${period.end}`,
+            entry.subject_code,
+            entry.subject_name,
+            entry.staff_name,
+            entry.room_number || ''
+          ]);
+        }
+      });
+    });
+    
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `timetable-${selectedSemester.department}-${selectedSemester.year}-S${selectedSemester.semester}-${selectedSemester.section}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      day_of_week: '',
+      period_number: '',
+      start_time: '',
+      end_time: '',
+      subject_code: '',
+      staff_id: '',
+      room_number: ''
+    });
+    setShowForm(false);
+    setFormStep(1);
+    setCurrentPeriod(1);
+    setDayPeriods([]);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this timetable entry?')) return;
+
+    try {
+      const response = await fetch(`/api/timetables/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
 
       if (response.ok) {
-        alert('Timetable entry created successfully!');
-        setShowForm(false);
-        setFormData({
-          staffId: '',
-          subjectCode: '',
-          batchId: '',
-          dayOfWeek: '',
-          timeSlotId: '',
-          roomNumber: '',
-          academicYear: new Date().getFullYear(),
-          semester: 1
-        });
-        setConflicts([]);
-      } else {
-        const error = await response.json();
-        alert(`Failed to create entry: ${error.error}`);
+        fetchTimetables();
+        setMessage('Timetable entry deleted successfully!');
       }
     } catch (error) {
-      console.error('Failed to create timetable entry:', error);
-      alert('Failed to create timetable entry');
+      setMessage('Error deleting timetable entry');
     }
   };
 
-  const getDayName = (day) => {
-    const days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return days[day];
+  const handleDeleteAllTimetable = async () => {
+    if (!window.confirm(`Are you sure you want to delete the entire timetable for ${selectedSemester.department} ${selectedSemester.year} - Semester ${selectedSemester.semester} Section ${selectedSemester.section}?`)) return;
+
+    try {
+      const yearToNumeric = { 'I': '1', 'II': '2', 'III': '3', 'IV': '4' };
+      const numericYear = yearToNumeric[selectedSemester.year] || selectedSemester.year;
+      
+      console.log('Deleting timetable for:', { department: selectedSemester.department, year: numericYear, semester: selectedSemester.semester, section: selectedSemester.section });
+      
+      const response = await fetch(`/api/timetables/class`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          department: selectedSemester.department,
+          year: numericYear,
+          semester: selectedSemester.semester,
+          section: selectedSemester.section
+        })
+      });
+
+      const result = await response.json();
+      console.log('Delete response:', result);
+
+      if (response.ok) {
+        fetchTimetables(); // Refetch from database instead of just clearing state
+        setMessage(result.message || 'Timetable deleted successfully!');
+      } else {
+        setMessage(result.error || 'Failed to delete timetable');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      setMessage('Error deleting timetable');
+    }
   };
 
+  const getTimetableGrid = () => {
+    const grid = {};
+    days.forEach((day, dayIndex) => {
+      grid[dayIndex] = {};
+      periods.forEach(period => {
+        grid[dayIndex][period.number] = null;
+      });
+    });
+
+    timetables.forEach(entry => {
+      if (grid[entry.day_of_week] && grid[entry.day_of_week][entry.period_number] !== undefined) {
+        grid[entry.day_of_week][entry.period_number] = entry;
+      }
+    });
+
+    return grid;
+  };
+
+  const filteredSubjects = subjects.filter(s => 
+    s.department === selectedSemester.department && 
+    s.year === selectedSemester.year && 
+    s.semester === selectedSemester.semester
+  );
+
+  const grid = getTimetableGrid();
+
   return (
-    <div className="timetable-management">
-      <div className="section-header">
-        <h2>Timetable Management</h2>
+    <div style={{ padding: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
         <button 
-          className="btn-primary"
-          onClick={() => setShowForm(true)}
+          onClick={() => setCurrentView('main')}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '8px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            color: '#6c757d'
+          }}
         >
-          <Plus size={16} /> Create Entry
+          <ArrowLeft size={20} />
         </button>
+        <h2 style={{ margin: 0, color: '#2c3e50' }}>Timetable Management</h2>
       </div>
 
-      {showForm && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>Create Timetable Entry</h3>
-              <button onClick={() => setShowForm(false)}><X size={20} /></button>
+      {/* Semester Selection */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '20px',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+      }}>
+        <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>Select Semester</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+          <select
+            value={selectedSemester.department}
+            onChange={(e) => setSelectedSemester({...selectedSemester, department: e.target.value})}
+            style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+          >
+            <option value="">Select Department</option>
+            <option value="IT">Information Technology</option>
+            <option value="CSE">Computer Science Engineering</option>
+            <option value="AIDS">Artificial Intelligence & Data Science</option>
+            <option value="MECH">Mechanical Engineering</option>
+            <option value="EEE">Electrical & Electronics Engineering</option>
+            <option value="ECE">Electronics & Communication Engineering</option>
+            <option value="CIVIL">Civil Engineering</option>
+          </select>
+          
+          <select
+            value={selectedSemester.year}
+            onChange={(e) => setSelectedSemester({...selectedSemester, year: e.target.value, semester: ''})}
+            style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+          >
+            <option value="">Select Year</option>
+            <option value="I">I Year</option>
+            <option value="II">II Year</option>
+            <option value="III">III Year</option>
+            <option value="IV">IV Year</option>
+          </select>
+          
+          <select
+            value={selectedSemester.semester}
+            onChange={(e) => setSelectedSemester({...selectedSemester, semester: e.target.value})}
+            disabled={!selectedSemester.year}
+            style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+          >
+            <option value="">Select Semester</option>
+            {selectedSemester.year === 'I' && (
+              <>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+              </>
+            )}
+            {selectedSemester.year === 'II' && (
+              <>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+              </>
+            )}
+            {selectedSemester.year === 'III' && (
+              <>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+              </>
+            )}
+            {selectedSemester.year === 'IV' && (
+              <>
+                <option value="7">Semester 7</option>
+                <option value="8">Semester 8</option>
+              </>
+            )}
+          </select>
+
+          <select
+            value={selectedSemester.section}
+            onChange={(e) => setSelectedSemester({...selectedSemester, section: e.target.value})}
+            disabled={!selectedSemester.semester}
+            style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+          >
+            <option value="">Select Section</option>
+            {sections.map(section => (
+              <option key={section} value={section}>Section {section}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Timetable Grid */}
+      {selectedSemester.department && selectedSemester.year && selectedSemester.semester && selectedSemester.section && (
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, color: '#2c3e50' }}>
+              {selectedSemester.department} {selectedSemester.year} - Semester {selectedSemester.semester} Section {selectedSemester.section}
+            </h3>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={exportTimetable}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Download size={16} /> Export CSV
+              </button>
+              <button
+                onClick={handleDeleteAllTimetable}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Trash2 size={16} /> Delete Timetable
+              </button>
+              <button
+                onClick={() => setShowForm(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  backgroundColor: '#3498db',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={16} /> Add Period
+              </button>
             </div>
+          </div>
 
-            <form onSubmit={handleSubmit}>
-              <div className="form-grid">
-                <select
-                  value={formData.staffId}
-                  onChange={(e) => setFormData({...formData, staffId: e.target.value})}
-                  required
-                >
-                  <option value="">Select Teacher</option>
-                  {teachers.map(teacher => (
-                    <option key={teacher.staff_id} value={teacher.staff_id}>
-                      {teacher.name} ({teacher.staff_id})
-                    </option>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '12px', backgroundColor: '#f8f9fa', border: '1px solid #e1e8ed', fontWeight: '600', width: '120px' }}>
+                    Period
+                  </th>
+                  {periods.map(period => (
+                    <th key={period.number} style={{ padding: '8px', backgroundColor: '#f8f9fa', border: '1px solid #e1e8ed', fontWeight: '600', fontSize: '12px', textAlign: 'center' }}>
+                      <div>P{period.number}</div>
+                      <div style={{ fontSize: '10px', color: '#6c757d' }}>
+                        {period.start}-{period.end}
+                      </div>
+                    </th>
                   ))}
-                </select>
-
-                <select
-                  value={formData.subjectCode}
-                  onChange={(e) => setFormData({...formData, subjectCode: e.target.value})}
-                  required
-                >
-                  <option value="">Select Subject</option>
-                  {subjects.map(subject => (
-                    <option key={subject.subject_code} value={subject.subject_code}>
-                      {subject.subject_code} - {subject.subject_name}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={formData.batchId}
-                  onChange={(e) => setFormData({...formData, batchId: e.target.value})}
-                  required
-                >
-                  <option value="">Select Batch</option>
-                  {batches.map(batch => (
-                    <option key={batch.id} value={batch.id}>
-                      {batch.class_name} ({batch.department} {batch.year})
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={formData.dayOfWeek}
-                  onChange={(e) => setFormData({...formData, dayOfWeek: e.target.value})}
-                  required
-                >
-                  <option value="">Select Day</option>
-                  <option value="1">Monday</option>
-                  <option value="2">Tuesday</option>
-                  <option value="3">Wednesday</option>
-                  <option value="4">Thursday</option>
-                  <option value="5">Friday</option>
-                  <option value="6">Saturday</option>
-                </select>
-
-                <select
-                  value={formData.timeSlotId}
-                  onChange={(e) => setFormData({...formData, timeSlotId: e.target.value})}
-                  required
-                >
-                  <option value="">Select Time Slot</option>
-                  {timeSlots.map(slot => (
-                    <option key={slot.id} value={slot.id}>
-                      {slot.slot_name} ({slot.start_time} - {slot.end_time})
-                    </option>
-                  ))}
-                </select>
-
-                <input
-                  type="text"
-                  placeholder="Room Number (optional)"
-                  value={formData.roomNumber}
-                  onChange={(e) => setFormData({...formData, roomNumber: e.target.value})}
-                />
-              </div>
-
-              {conflicts.length > 0 && (
-                <div className="conflicts-section">
-                  <h4><AlertTriangle size={16} /> Conflicts Detected:</h4>
-                  {conflicts.map((conflict, index) => (
-                    <div key={index} className="conflict-item">
-                      <strong>{conflict.type.toUpperCase()}:</strong> {conflict.message}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="form-actions">
-                <button type="button" onClick={checkConflicts} className="btn-secondary">
-                  Check Conflicts
-                </button>
-                <button type="submit" className="btn-primary">
-                  <Check size={16} /> Create Entry
-                </button>
-              </div>
-            </form>
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((day, dayIndex) => (
+                  <tr key={dayIndex}>
+                    <td style={{ padding: '12px', border: '1px solid #e1e8ed', backgroundColor: '#f8f9fa', fontWeight: '500' }}>
+                      {day}
+                    </td>
+                    {periods.map(period => {
+                      const entry = grid[dayIndex][period.number];
+                      return (
+                        <td key={period.number} style={{ padding: '6px', border: '1px solid #e1e8ed', width: '100px', verticalAlign: 'top' }}>
+                          {entry ? (
+                            <div style={{
+                              backgroundColor: '#e8f4fd',
+                              padding: '6px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              position: 'relative',
+                              minHeight: '50px'
+                            }}>
+                              <div style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '2px' }}>{entry.subject_code}</div>
+                              <div style={{ color: '#6c757d', marginBottom: '2px' }}>{entry.staff_name.split(' ')[0]}</div>
+                              {entry.room_number && (
+                                <div style={{ color: '#6c757d' }}>{entry.room_number}</div>
+                              )}
+                              <button
+                                onClick={() => handleDelete(entry.id)}
+                                style={{
+                                  position: 'absolute',
+                                  top: '2px',
+                                  right: '2px',
+                                  background: 'none',
+                                  border: 'none',
+                                  color: '#e74c3c',
+                                  cursor: 'pointer',
+                                  padding: '1px'
+                                }}
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#adb5bd' }}>
+                              -
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      <div className="info-section">
-        <h3>Timetable System Features:</h3>
-        <ul>
-          <li>✅ <strong>Multi-subject Assignment:</strong> Teachers can handle multiple subjects across different batches</li>
-          <li>✅ <strong>Conflict Prevention:</strong> Automatic detection of teacher, batch, and room conflicts</li>
-          <li>✅ <strong>Workload Distribution:</strong> Track teacher workload across subjects and batches</li>
-          <li>✅ <strong>Flexible Scheduling:</strong> Support for different time slots and room assignments</li>
-          <li>✅ <strong>Batch-specific Subjects:</strong> Each subject is linked to a specific batch</li>
-        </ul>
-      </div>
+      {/* Add Period Form */}
+      {showForm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <form onSubmit={formStep === 2 ? handleSubmit : (e) => { 
+            e.preventDefault(); 
+            setFormStep(2);
+            setFormData({
+              ...formData,
+              period_number: '1',
+              start_time: periods[0]?.start || '',
+              end_time: periods[0]?.end || ''
+            });
+          }} style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '30px',
+            width: '500px',
+            maxWidth: '90vw'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, color: '#2c3e50' }}>Add Period - Step {formStep} of 2</h3>
+              <button type="button" onClick={() => { setShowForm(false); setFormStep(1); }} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
+            </div>
+
+            {formStep === 1 ? (
+              <div style={{ display: 'grid', gap: '15px' }}>
+                <select
+                  value={formData.day_of_week}
+                  onChange={(e) => {
+                    setFormData({
+                      ...formData, 
+                      day_of_week: e.target.value,
+                      period_number: '1',
+                      start_time: periods[0]?.start || '',
+                      end_time: periods[0]?.end || ''
+                    });
+                    setCurrentPeriod(1);
+                  }}
+                  required
+                  style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+                >
+                  <option value="">Select Day</option>
+                  {days.map((day, index) => (
+                    <option key={index} value={index}>{day}</option>
+                  ))}
+                </select>
+                <div style={{ padding: '10px', backgroundColor: '#f0f8ff', borderRadius: '8px', textAlign: 'center' }}>
+                  You will add periods consecutively from Period 1 to 8
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '15px' }}>
+                <div style={{ padding: '10px', backgroundColor: '#e8f4fd', borderRadius: '8px', textAlign: 'center', fontWeight: '600' }}>
+                  Day {days[formData.day_of_week]} - Period {currentPeriod} ({periods[currentPeriod-1]?.start}-{periods[currentPeriod-1]?.end})
+                </div>
+                <select
+                  value={formData.subject_code}
+                  onChange={(e) => {
+                    const selectedSubject = e.target.value;
+                    const assignment = assignments.find(a => a.subject_code === selectedSubject);
+                    
+                    setFormData({
+                      ...formData, 
+                      subject_code: selectedSubject,
+                      staff_id: assignment ? assignment.staff_id : ''
+                    });
+                  }}
+                  required
+                  style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+                >
+                  <option value="">Select Subject</option>
+                  {assignments.map(assignment => (
+                    <option 
+                      key={assignment.id} 
+                      value={assignment.subject_code}
+                    >
+                      {assignment.subject_code} - {assignment.subject_name} ({assignment.staff_name})
+                    </option>
+                  ))}
+                </select>
+
+
+
+                {formData.subject_code && (
+                  <div style={{ padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e1e8ed' }}>
+                    <strong>Assigned Staff:</strong> {assignments.find(a => a.subject_code === formData.subject_code)?.staff_name}
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  placeholder="Room Number (Optional)"
+                  value={formData.room_number}
+                  onChange={(e) => setFormData({...formData, room_number: e.target.value})}
+                  style={{ padding: '10px', borderRadius: '8px', border: '2px solid #e1e8ed' }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
+              {formStep === 2 && (
+                <button type="button" onClick={() => setFormStep(1)} style={{ padding: '10px 20px', border: '2px solid #e1e8ed', backgroundColor: 'white', borderRadius: '8px', cursor: 'pointer' }}>
+                  Back
+                </button>
+              )}
+              <button type="button" onClick={resetForm} style={{ padding: '10px 20px', border: '2px solid #e1e8ed', backgroundColor: 'white', borderRadius: '8px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#3498db', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                {formStep === 1 ? 'Start Adding Periods' : (currentPeriod < 8 ? `Add Period ${currentPeriod} & Next` : 'Add Final Period')}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

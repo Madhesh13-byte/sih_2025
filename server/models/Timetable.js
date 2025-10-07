@@ -35,24 +35,27 @@ class TimetableModel {
       )
     `);
 
-    // Insert default time slots
-    const timeSlots = [
-      ['Period 1', '09:00', '09:50', 1],
-      ['Period 2', '09:50', '10:40', 2],
-      ['Period 3', '11:00', '11:50', 3],
-      ['Period 4', '11:50', '12:40', 4],
-      ['Period 5', '13:30', '14:20', 5],
-      ['Period 6', '14:20', '15:10', 6],
-      ['Period 7', '15:10', '16:00', 7],
-      ['Period 8', '16:00', '16:50', 8]
-    ];
+    // Insert default time slots only once
+    const existingSlots = await this.db.query('SELECT COUNT(*) as count FROM time_slots');
+    
+    if (existingSlots.rows[0].count === '0') {
+      const timeSlots = [
+        ['Period 1', '09:00', '09:50', 1],
+        ['Period 2', '09:50', '10:40', 2],
+        ['Period 3', '11:00', '11:50', 3],
+        ['Period 4', '11:50', '12:40', 4],
+        ['Period 5', '13:30', '14:20', 5],
+        ['Period 6', '14:20', '15:10', 6],
+        ['Period 7', '15:10', '16:00', 7],
+        ['Period 8', '16:00', '16:50', 8]
+      ];
 
-    for (const slot of timeSlots) {
-      await this.db.query(`
-        INSERT INTO time_slots (slot_name, start_time, end_time, slot_order)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT DO NOTHING
-      `, slot);
+      for (const slot of timeSlots) {
+        await this.db.query(`
+          INSERT INTO time_slots (slot_name, start_time, end_time, slot_order)
+          VALUES ($1, $2, $3, $4)
+        `, slot);
+      }
     }
   }
 

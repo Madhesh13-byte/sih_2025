@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import './styles/Calendar.css';
 
-const Calendar = () => {
+const Calendar = ({ setCurrentView }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [workingDays, setWorkingDays] = useState({});
   const [selectedType, setSelectedType] = useState('working');
@@ -142,9 +143,12 @@ const Calendar = () => {
 
   return (
     <div className="calendar-management">
-      <div className="calendar-header">
+      <div className="form-header">
+        <button className="back-btn" onClick={() => setCurrentView('main')}>
+          <ArrowLeft size={16} />
+        </button>
         <h2>Academic Calendar Management</h2>
-        <div className="calendar-actions">
+        <div className="header-actions">
           <button onClick={() => setShowBulkSelect(!showBulkSelect)} className="bulk-btn">
             Bulk Select
           </button>
